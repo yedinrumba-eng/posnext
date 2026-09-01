@@ -31,8 +31,13 @@ class CustomSalesInvoice(SalesInvoice):
 		accounts (like wallet accounts).
 		"""
 		if cint(self.is_pos):
+			# korvex fork fix: ERPNext v16 moved this field from Accounts
+			# Settings to POS Settings (patches.v16_0.
+			# set_post_change_gl_entries_on_pos_settings); this override
+			# still read the old location, which raised ValidationError
+			# on every POS Sales Invoice submit under v16.
 			skip_change_gl_entries = not cint(
-				frappe.db.get_single_value("Accounts Settings", "post_change_gl_entries")
+				frappe.db.get_single_value("POS Settings", "post_change_gl_entries")
 			)
 
 			for payment_mode in self.payments:
