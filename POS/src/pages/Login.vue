@@ -1,99 +1,103 @@
 <template>
-  <div class="min-h-screen flex flex-col items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-md w-full space-y-8">
-      <div class="text-center">
-        <h2 class="mt-6 text-3xl font-extrabold text-gray-900">
-          {{ __('Sign in to POS Next') }}
-        </h2>
-        <p class="mt-2 text-sm text-gray-600">
-          {{ __('Access your point of sale system') }}
-        </p>
-      </div>
+	<main class="korvex-login">
+		<div class="korvex-login__scene" aria-hidden="true">
+			<span class="korvex-login__halo korvex-login__halo--blue" />
+			<span class="korvex-login__halo korvex-login__halo--cyan" />
+			<span class="korvex-login__halo korvex-login__halo--green" />
+			<span class="korvex-login__orbit korvex-login__orbit--outer" />
+			<span class="korvex-login__orbit korvex-login__orbit--middle" />
+			<span class="korvex-login__orbit korvex-login__orbit--inner" />
+			<span class="korvex-login__star korvex-login__star--one" />
+			<span class="korvex-login__star korvex-login__star--two" />
+			<span class="korvex-login__star korvex-login__star--three" />
+		</div>
 
-      <div class="bg-white py-8 px-6 shadow rounded-lg">
-        <form class="space-y-6" @submit.prevent="submit">
-          <div v-if="session.login.error" class="rounded-md bg-red-50 p-4">
-            <div class="flex">
-              <div class="flex-shrink-0">
-                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                </svg>
-              </div>
-              <div class="ml-3">
-                <h3 class="text-sm font-medium text-red-800">
-                  {{ __('Login Failed') }}
-                </h3>
-                <div class="mt-2 text-sm text-red-700">
-                  <p>{{ session.login.error.messages.join('\n') }}</p>
-                </div>
-              </div>
-            </div>
-          </div>
+		<section class="korvex-login__card" aria-labelledby="login-title">
+			<header class="korvex-login__brand">
+				<img
+					class="korvex-login__brand-mark"
+					src="../assets/korvexcio-mark.svg"
+					alt=""
+					aria-hidden="true"
+				/>
+				<div class="korvex-login__brand-copy">
+					<h1>{{ __("KORVEXCIO") }}</h1>
+					<span>{{ __("Punto de venta") }}</span>
+				</div>
+			</header>
 
-          <div>
-            <Input
-              v-model="loginForm.email"
-              required
-              name="email"
-              type="text"
-              :placeholder="__('Enter your username or email')"
-              :label="__('User ID / Email')"
-              :disabled="session.login.loading"
-            />
-          </div>
+			<div class="korvex-login__intro">
+				<h2 id="login-title">{{ __("Iniciar sesión") }}</h2>
+				<p>{{ __("Accede a tu espacio de caja para continuar.") }}</p>
+			</div>
 
-          <div>
-            <label class="block">
-              <span class="mb-2 block text-sm leading-4 text-gray-700">{{ __('Password') }}</span>
-              <div class="relative">
-                <input
-                  v-model="loginForm.password"
-                  required
-                  name="password"
-                  :type="showPassword ? 'text' : 'password'"
-                  :placeholder="__('Enter your password')"
-                  :disabled="session.login.loading"
-                  class="form-input block w-full border-gray-400 placeholder-gray-500 pe-10"
-                />
-                <button
-                  type="button"
-                  @click="showPassword = !showPassword"
-                  class="absolute inset-y-0 end-0 flex items-center pe-3 text-gray-600 hover:text-gray-800 transition-colors focus:outline-none"
-                  :disabled="session.login.loading"
-                  tabindex="-1"
-                  :aria-label="showPassword ? __('Hide password') : __('Show password')"
-                >
-                  <FeatherIcon
-                    :name="showPassword ? 'eye-off' : 'eye'"
-                    class="h-5 w-5"
-                    :stroke-width="2"
-                  />
-                </button>
-              </div>
-            </label>
-          </div>
+			<form class="korvex-login__form" @submit.prevent="submit">
+				<div v-if="session.login.error" class="korvex-login__error" role="alert">
+					<FeatherIcon name="alert-circle" aria-hidden="true" :stroke-width="2" />
+					<div>
+						<strong>{{ __("No pudimos iniciar sesión") }}</strong>
+						<p>{{ session.login.error.messages.join("\n") }}</p>
+					</div>
+				</div>
 
-          <div>
-            <Button
-              :loading="session.login.loading"
-              variant="solid"
-              class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-              type="submit"
-            >
-              {{ session.login.loading ? __('Signing in...') : __('Sign in') }}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+				<div class="korvex-login__field">
+					<label for="korvex-login-email">{{ __("Usuario o correo") }}</label>
+					<input
+						id="korvex-login-email"
+						v-model="loginForm.email"
+						required
+						autocomplete="username"
+						name="email"
+						type="text"
+						:placeholder="__('Escribe tu usuario o correo')"
+						:disabled="session.login.loading"
+					/>
+				</div>
 
-    <!-- Shift Opening Dialog -->
-    <ShiftOpeningDialog
-      v-model="showShiftDialog"
-      @shift-opened="handleShiftOpened"
-      @dialog-closed="handleDialogClosed"
-    />
-  </div>
+				<div class="korvex-login__field">
+					<label for="korvex-login-password">{{ __("Contraseña") }}</label>
+					<span class="korvex-login__password">
+						<input
+							id="korvex-login-password"
+							v-model="loginForm.password"
+							required
+							autocomplete="current-password"
+							name="password"
+							:type="showPassword ? 'text' : 'password'"
+							:placeholder="__('Escribe tu contraseña')"
+							:disabled="session.login.loading"
+						/>
+						<button
+							type="button"
+							class="korvex-login__password-toggle"
+							:disabled="session.login.loading"
+							:aria-label="showPassword ? __('Ocultar contraseña') : __('Mostrar contraseña')"
+							@click="showPassword = !showPassword"
+						>
+							<FeatherIcon :name="showPassword ? 'eye-off' : 'eye'" aria-hidden="true" :stroke-width="2" />
+						</button>
+					</span>
+				</div>
+
+				<button
+					type="submit"
+					class="korvex-login__submit"
+					:disabled="session.login.loading"
+				>
+					<span v-if="session.login.loading" class="korvex-login__spinner" aria-hidden="true" />
+					{{ session.login.loading ? __("Iniciando sesión...") : __("Iniciar sesión") }}
+				</button>
+			</form>
+
+			<footer>{{ __("Acceso autorizado para personal Korvex.") }}</footer>
+		</section>
+
+		<ShiftOpeningDialog
+			v-model="showShiftDialog"
+			@shift-opened="handleShiftOpened"
+			@dialog-closed="handleDialogClosed"
+		/>
+	</main>
 </template>
 
 <script setup>
@@ -217,3 +221,6 @@ watch([() => loginForm.email, () => loginForm.password], () => {
 	}
 })
 </script>
+
+<style scoped src="../styles/login-scene.css"></style>
+<style scoped src="../styles/login.css"></style>

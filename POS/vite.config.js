@@ -19,7 +19,10 @@ function posNextBuildVersionPlugin(version) {
 		name: "pos-next-build-version",
 		apply: "build",
 		async writeBundle() {
-			const versionFile = path.resolve(__dirname, "../pos_next/public/pos/version.json")
+			const versionFile = path.resolve(
+				__dirname,
+				"../pos_next/public/pos/version.json",
+			)
 			await fs.mkdir(path.dirname(versionFile), { recursive: true })
 			await fs.writeFile(
 				versionFile,
@@ -34,9 +37,9 @@ function posNextBuildVersionPlugin(version) {
 						}),
 					},
 					null,
-					2
+					2,
 				),
-				"utf8"
+				"utf8",
 			)
 			console.log(`\n✓ Build version written: ${version}`)
 		},
@@ -48,10 +51,12 @@ export default defineConfig({
 	plugins: [
 		posNextBuildVersionPlugin(buildVersion),
 		frappeui({
-			frappeProxy: true,
+			// Bench auto-discovery loops at the Windows drive root; use server.proxy there.
+			frappeProxy: process.platform !== "win32",
 			jinjaBootData: true,
 			lucideIcons: true,
 			buildConfig: {
+				baseUrl: "/assets/pos_next/pos/",
 				indexHtmlPath: "../pos_next/www/pos.html",
 				outDir: "../pos_next/public/pos",
 				emptyOutDir: true,
@@ -236,9 +241,12 @@ export default defineConfig({
 		__BUILD_VERSION__: JSON.stringify(buildVersion),
 	},
 	optimizeDeps: {
+		// Virtual Lucide imports need Vite's loader, not esbuild pre-bundling.
+		exclude: ["frappe-ui"],
 		include: [
+			"dayjs",
+			"debug",
 			"feather-icons",
-			"showdown",
 			"highlight.js/lib/core",
 			"interactjs",
 		],

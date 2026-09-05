@@ -9,7 +9,13 @@ export default defineConfig({
 			"@": path.resolve(__dirname, "src"),
 		},
 	},
+	optimizeDeps: {
+		exclude: ["frappe-ui"],
+	},
 	test: {
 		environment: "jsdom",
+	},
+	worker: {
+		format: "es",
 	},
 })
