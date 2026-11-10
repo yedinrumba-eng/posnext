@@ -153,9 +153,12 @@ export default defineConfig({
 						},
 					},
 					// Cache product images with StaleWhileRevalidate for better UX
-					// Kiosk catalogs have hundreds of images: allow query strings, keep 3000 for 30 days, purge on quota
+					// Kiosk catalogs have hundreds of images: same-origin public /files/ only (no /private/), keep 3000 for 30 days, purge on quota
 					{
-						urlPattern: /\/files\/[^?#]+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?.*)?$/i,
+						urlPattern: ({ url }) =>
+							url.origin === self.location.origin &&
+							url.pathname.startsWith("/files/") &&
+							/\.(?:jpg|jpeg|png|gif|webp|svg)$/i.test(url.pathname),
 						handler: "StaleWhileRevalidate",
 						options: {
 							cacheName: "product-images-cache",
