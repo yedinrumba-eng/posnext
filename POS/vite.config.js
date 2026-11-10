@@ -153,14 +153,16 @@ export default defineConfig({
 						},
 					},
 					// Cache product images with StaleWhileRevalidate for better UX
+					// Kiosk catalogs have hundreds of images: allow query strings, keep 3000 for 30 days, purge on quota
 					{
-						urlPattern: /\/files\/.*\.(jpg|jpeg|png|gif|webp|svg)$/i,
+						urlPattern: /\/files\/[^?#]+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?.*)?$/i,
 						handler: "StaleWhileRevalidate",
 						options: {
 							cacheName: "product-images-cache",
 							expiration: {
-								maxEntries: 200, // Cache up to 200 product images
-								maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+								maxEntries: 3000,
+								maxAgeSeconds: 60 * 60 * 24 * 30,
+								purgeOnQuotaError: true,
 							},
 							cacheableResponse: {
 								statuses: [0, 200],

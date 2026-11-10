@@ -53,6 +53,8 @@
   "section_break_printing",
   "allow_print_last_invoice",
   "silent_print",
+  "kiosk_mode",
+  "hide_item_search",
   "section_break_delivery",
   "use_delivery_charges",
   "auto_set_delivery_charges",
@@ -405,6 +407,19 @@
    "description": "Print without dialog"
   },
   {
+   "default": "0",
+   "description": "Large touch tiles, starts on the first Item Group, no long-press, no automatic list view.",
+   "fieldname": "kiosk_mode",
+   "fieldtype": "Check",
+   "label": "Kiosk Mode"
+  },
+  {
+   "default": "0",
+   "fieldname": "hide_item_search",
+   "fieldtype": "Check",
+   "label": "Hide Item Search"
+  },
+  {
    "collapsible": 1,
    "fieldname": "section_break_delivery",
    "fieldtype": "Section Break",
@@ -493,7 +508,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 0,
  "links": [],
- "modified": "2025-11-24 12:00:00.000000",
+ "modified": "2026-11-10 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "POS Next",
  "name": "POS Settings",

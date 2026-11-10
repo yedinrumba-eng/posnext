@@ -6,7 +6,8 @@
 				<button
 					@click="itemStore.setSelectedItemGroup(null)"
 					:class="[
-						'flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-medium whitespace-nowrap transition-[background-color,border-color] duration-75 touch-manipulation snap-start flex-shrink-0',
+						'flex items-center rounded-lg font-medium whitespace-nowrap transition-[background-color,border-color] duration-75 touch-manipulation snap-start flex-shrink-0',
+						tabSizeClasses(kioskMode),
 						!selectedItemGroup
 							? 'bg-blue-50 text-blue-600 border-2 border-blue-500 shadow-sm'
 							: 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 active:bg-gray-100',
@@ -22,7 +23,8 @@
 					:key="group.item_group"
 					@click="itemStore.setSelectedItemGroup(group.item_group)"
 					:class="[
-						'flex items-center px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-medium whitespace-nowrap transition-[background-color,border-color] duration-75 touch-manipulation snap-start flex-shrink-0',
+						'flex items-center rounded-lg font-medium whitespace-nowrap transition-[background-color,border-color] duration-75 touch-manipulation snap-start flex-shrink-0',
+						tabSizeClasses(kioskMode),
 						selectedItemGroup === group.item_group
 							? 'bg-blue-50 text-blue-600 border-2 border-blue-500 shadow-sm'
 							: 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 active:bg-gray-100',
@@ -42,7 +44,7 @@
 		</div>
 
 		<!-- Search Bar with Barcode Scanner and View Controls -->
-		<div class="px-1.5 sm:px-3 py-1.5 sm:py-2 bg-white border-b border-gray-200">
+		<div v-if="!hideItemSearch" class="px-1.5 sm:px-3 py-1.5 sm:py-2 bg-white border-b border-gray-200">
 			<div class="flex items-center gap-1 sm:gap-2">
 				<div class="flex-1 relative min-w-0">
 					<!-- Search Icon -->
@@ -276,7 +278,7 @@
 				class="flex-1 overflow-y-auto p-1.5 sm:p-3"
 				style="min-height: 0;"
 			>
-				<div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-1.5 sm:gap-2.5">
+				<div :class="gridColsClasses(kioskMode)">
 					<div
 						v-for="item in paginatedItems"
 						:key="item.item_code"
@@ -291,10 +293,10 @@
 						<!-- Stock Badge - Tap to select, long press to view warehouse availability -->
 						<div
 							v-if="item.is_stock_item || item.is_bundle"
-							@pointerdown="onLongPressStart(item)"
-							@pointerup="onLongPressEnd"
-							@pointercancel="clearLongPress"
-							@pointerleave="clearLongPress"
+							@pointerdown="longPressEnabled(kioskMode) && onLongPressStart(item)"
+							@pointerup="longPressEnabled(kioskMode) && onLongPressEnd()"
+							@pointercancel="longPressEnabled(kioskMode) && clearLongPress()"
+							@pointerleave="longPressEnabled(kioskMode) && clearLongPress()"
 							:class="[
 								'absolute -top-1.5 -end-1.5 sm:-top-2 sm:-end-2 rounded-md shadow-lg z-10',
 								'px-2 sm:px-2.5 py-1 sm:py-1 text-[10px] sm:text-xs font-bold',
@@ -376,10 +378,10 @@
 
 						<!-- Item Details -->
 						<div class="min-w-0">
-							<h3 class="text-[10px] sm:text-xs font-semibold text-gray-900 truncate mb-0.5 leading-tight">
+							<h3 :class="itemNameClasses(kioskMode)">
 								{{ item.item_name }}
 							</h3>
-							<p class="text-[9px] sm:text-[10px] text-gray-500 leading-tight">
+							<p :class="itemPriceClasses(kioskMode)">
 									<span class="font-semibold text-blue-600">{{ formatCurrency(item.rate || item.price_list_rate || 0) }}</span>
 									<span class="text-gray-400">/ {{ item.uom || item.stock_uom || __('Nos', null, 'UOM') }}</span>
 							</p>
@@ -718,6 +720,15 @@ import { useStock } from "@/composables/useStock"
 import { formatCurrency as formatCurrencyUtil } from "@/utils/currency"
 import { useToast } from "@/composables/useToast"
 import { storeToRefs } from "pinia"
+import {
+	gridColsClasses,
+	itemNameClasses,
+	itemPriceClasses,
+	longPressEnabled,
+	pickInitialItemGroup,
+	shouldAutoSwitchToList,
+	tabSizeClasses,
+} from "@/utils/kioskMode"
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
 import {
 	createOptimizedClickHandler,
@@ -743,6 +754,7 @@ const emit = defineEmits(["item-selected"])
 // Use composables
 const { getStockStatus } = useStock()
 const settingsStore = usePOSSettingsStore()
+const { kioskMode, hideItemSearch } = storeToRefs(settingsStore)
 const { showError, showWarning } = useToast()
 
 // Use Pinia store
@@ -904,9 +916,13 @@ watch(
 		// Only auto-switch if user hasn't manually set a preference
 		// and we're in grid view with many items
 		if (
-			!userManuallySetView.value &&
-			viewMode.value === "grid" &&
-			itemCount > itemThreshold.value
+			shouldAutoSwitchToList({
+				kiosk: kioskMode.value,
+				userManuallySetView: userManuallySetView.value,
+				viewMode: viewMode.value,
+				itemCount,
+				threshold: itemThreshold.value,
+			})
 		) {
 			if (lastAutoSwitchCount.value !== itemCount) {
 				viewMode.value = "list"
@@ -917,6 +933,23 @@ watch(
 		}
 	},
 	{ immediate: false },
+)
+
+// Kiosk mode: start on the first Item Group instead of "All Items".
+// Also watches kioskMode because the POS settings can arrive after the groups.
+watch(
+	[itemGroups, kioskMode],
+	() => {
+		const initial = pickInitialItemGroup(
+			kioskMode.value,
+			itemGroups.value || [],
+			selectedItemGroup.value,
+		)
+		if (initial !== selectedItemGroup.value) {
+			itemStore.setSelectedItemGroup(initial)
+		}
+	},
+	{ immediate: true },
 )
 
 // Throttle scroll handler for better performance

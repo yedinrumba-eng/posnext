@@ -154,7 +154,9 @@ def get_pos_settings(pos_profile):
 				"silent_print",
 				"allow_sales_order",
 				"allow_select_sales_order",
-				"create_only_sales_order"
+				"create_only_sales_order",
+				"kiosk_mode",
+				"hide_item_search"
 			],
 			as_dict=True
 		)
@@ -188,7 +190,9 @@ def get_default_pos_settings():
 		"silent_print": 0,
 		"allow_sales_order": 0,
 		"allow_select_sales_order": 0,
-		"create_only_sales_order": 0
+		"create_only_sales_order": 0,
+		"kiosk_mode": 0,
+		"hide_item_search": 0
 	}
 
 

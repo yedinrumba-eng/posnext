@@ -47,6 +47,8 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 		// Printing
 		allow_print_last_invoice: 0,
 		silent_print: 0,
+		kiosk_mode: 0,
+		hide_item_search: 0,
 		// Delivery
 		use_delivery_charges: 0,
 		auto_set_delivery_charges: 0,
@@ -170,6 +172,8 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 		Boolean(settings.value.allow_print_last_invoice),
 	)
 	const silentPrint = computed(() => Boolean(settings.value.silent_print))
+	const kioskMode = computed(() => Boolean(settings.value.kiosk_mode))
+	const hideItemSearch = computed(() => Boolean(settings.value.hide_item_search))
 
 	// Computed - Delivery
 	const useDeliveryCharges = computed(() =>
@@ -309,6 +313,8 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 			fetch_coupon: 0,
 			allow_print_last_invoice: 0,
 			silent_print: 0,
+			kiosk_mode: 0,
+			hide_item_search: 0,
 			use_delivery_charges: 0,
 			auto_set_delivery_charges: 0,
 			use_limit_search: 0,
@@ -426,6 +432,8 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 		// Computed - Printing
 		allowPrintLastInvoice,
 		silentPrint,
+		kioskMode,
+		hideItemSearch,
 
 		// Computed - Delivery
 		useDeliveryCharges,
