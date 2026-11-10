@@ -1,6 +1,7 @@
 import { createResource } from "frappe-ui"
 import { computed, ref, toRaw } from "vue"
-import { isOffline } from "@/utils/offline"
+import { effectiveTaxRate } from "@/utils/itemTax"
+import { isOffline, getSetting, setSetting } from "@/utils/offline"
 import { useSerialNumberStore } from "@/stores/serialNumber"
 
 
@@ -216,6 +217,9 @@ export function useInvoice() {
 				// Add item_group and brand for offer eligibility checking
 				item_group: item.item_group,
 				brand: item.brand,
+				// Per-item tax from the server (D28.13)
+				item_tax_rate: item.item_tax_rate || {},
+				item_tax_template: item.item_tax_template || "",
 			}
 			invoiceItems.value.push(newItem)
 			// Recalculate the newly added item to apply taxes
@@ -463,39 +467,6 @@ export function useInvoice() {
 		rebuildIncrementalCache()
 	}
 
-	// Performance: Cache tax calculation to avoid repeated loops
-	let cachedTaxRate = 0
-	let taxRulesCacheKey = ""
-
-	function calculateTotalTaxRate() {
-		// Create cache key from tax rules
-		const currentKey = JSON.stringify(taxRules.value)
-
-		// Return cached value if tax rules haven't changed
-		if (currentKey === taxRulesCacheKey && cachedTaxRate !== 0) {
-			return cachedTaxRate
-		}
-
-		// Calculate total tax rate
-		let totalRate = 0
-		if (taxRules.value && taxRules.value.length > 0) {
-			for (const taxRule of taxRules.value) {
-				if (
-					taxRule.charge_type === "On Net Total" ||
-					taxRule.charge_type === "On Previous Row Total"
-				) {
-					totalRate += taxRule.rate || 0
-				}
-			}
-		}
-
-		// Cache the result
-		cachedTaxRate = totalRate
-		taxRulesCacheKey = currentKey
-
-		return totalRate
-	}
-
 	function rebuildIncrementalCache() {
 		/**
 		 * Rebuild cache from scratch - used when bulk operations modify all items
@@ -562,7 +533,7 @@ export function useInvoice() {
 		item.discount_amount = discountAmount
 
 		// Calculate tax based on inclusive/exclusive mode
-		const totalTaxRate = calculateTotalTaxRate()
+		const totalTaxRate = effectiveTaxRate(taxRules.value, item.item_tax_rate)
 		let netAmount = 0
 		let taxAmount = 0
 
@@ -957,8 +928,21 @@ export function useInvoice() {
 		 * Load tax rules from POS Profile and tax inclusive setting from POS Settings
 		 */
 		try {
-			const result = await getTaxesResource.submit({ pos_profile: profileName })
-			taxRules.value = result?.data || result || []
+			// Offline: keep the last rules in IndexedDB so totals match without network
+			const cacheKey = `pos_next_tax_rules:${profileName}`
+			let rules
+			try {
+				const result = await getTaxesResource.submit({ pos_profile: profileName })
+				rules = result?.data || result || []
+				try {
+					await setSetting(cacheKey, rules)
+				} catch (cacheError) {
+					console.warn("Failed to cache tax rules:", cacheError)
+				}
+			} catch {
+				rules = await getSetting(cacheKey, [])
+			}
+			taxRules.value = rules
 
 			// Load tax inclusive setting from POS Settings if provided
 			if (posSettings && posSettings.tax_inclusive !== undefined) {

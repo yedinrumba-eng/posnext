@@ -8,6 +8,7 @@ from collections import defaultdict
 import frappe
 from erpnext.stock.doctype.batch.batch import get_batch_qty
 from erpnext.stock.get_item_details import get_item_details as erpnext_get_item_details
+from erpnext.stock.get_item_details import get_item_tax_map, get_item_tax_template
 from frappe import _, as_json
 from frappe.query_builder import DocType, functions as fn
 from frappe.utils import flt, nowdate
@@ -944,6 +945,44 @@ def _get_bundle_warehouse_availability_bulk(bundle_codes, warehouses):
 	return dict(result)
 
 
+def _get_item_tax_rates(pos_profile_doc, item_codes: list[str]) -> dict[str, tuple[str, dict]]:
+	"""Resolve each Item's tax template and per-account rates the way ERPNext does.
+
+	Returns {item_code: (item_tax_template, {account_head: rate})}. The cart uses it to
+	show the same tax as the server computes (Item Tax Template of the Item or its Item Group).
+	"""
+	company = pos_profile_doc.company
+	if not company:
+		return {}
+	ctx = {
+		"company": company,
+		"tax_category": pos_profile_doc.get("tax_category") or "",
+		"transaction_date": nowdate(),
+	}
+	template_by_group = {}
+	result = {}
+	for code in item_codes:
+		try:
+			item_doc = frappe.get_cached_doc("Item", code)
+		except frappe.DoesNotExistError:
+			result[code] = ("", {})
+			continue
+		if item_doc.taxes:
+			template = get_item_tax_template(dict(ctx), item_doc)
+		elif item_doc.item_group in template_by_group:
+			template = template_by_group[item_doc.item_group]
+		else:
+			template = get_item_tax_template(dict(ctx), item_doc)
+			template_by_group[item_doc.item_group] = template
+		rates = (
+			get_item_tax_map(doc={"company": company, "taxes": []}, tax_template=template, as_json=False)
+			if template
+			else {}
+		)
+		result[code] = (template or "", rates)
+	return result
+
+
 @frappe.whitelist()
 def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20):
 	"""Get items for POS with stock, price, and tax details"""
@@ -1041,6 +1080,7 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 
 		# Prepare maps for enrichment
 		item_codes = [item["item_code"] for item in items]
+		tax_rates = _get_item_tax_rates(pos_profile_doc, item_codes) if item_codes else {}
 		barcode_map = {}
 		conversion_map = defaultdict(dict)  # parent -> {uom: factor}
 		uom_map = {}  # parent -> [ {uom, conversion_factor}, ... ]
@@ -1264,6 +1304,9 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 
 			# UOM-specific prices map for frontend selector
 			item["uom_prices"] = uom_prices_map.get(item["item_code"], {})
+
+			# Item Tax Template and per-account rates (same rule as ERPNext, D28.13)
+			item["item_tax_template"], item["item_tax_rate"] = tax_rates.get(item["item_code"], ("", {}))
 
 		return items
 	except Exception as e:
