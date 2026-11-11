@@ -181,10 +181,11 @@ def get_taxes(pos_profile):
 			})
 
 		return taxes
-	except Exception as e:
+	except Exception:
 		frappe.log_error(frappe.get_traceback(), "Get Taxes Error")
-		# Return empty array instead of throwing - taxes are optional
-		return []
+		# Re-raise: [] must mean "this profile has no taxes". The POS tells an error apart from
+		# that and keeps the tax rules it stored (D28.15).
+		raise
 
 
 @frappe.whitelist()

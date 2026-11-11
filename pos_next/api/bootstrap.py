@@ -126,6 +126,11 @@ def get_pos_profile_data(pos_profile):
 	}
 
 
+def _site_rounding_method():
+	"""Rounding method of the site (System Settings), same fallback as frappe.utils.rounded()."""
+	return frappe.get_system_settings("rounding_method") or "Banker's Rounding (legacy)"
+
+
 def get_pos_settings(pos_profile):
 	"""Get POS Settings for a given POS Profile"""
 	if not pos_profile:
@@ -164,6 +169,8 @@ def get_pos_settings(pos_profile):
 		if not pos_settings:
 			return get_default_pos_settings()
 
+		# The cart rounds tax and total with the same method as the server (D28.14)
+		pos_settings["rounding_method"] = _site_rounding_method()
 		return pos_settings
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "Get POS Settings Error")
@@ -192,7 +199,8 @@ def get_default_pos_settings():
 		"allow_select_sales_order": 0,
 		"create_only_sales_order": 0,
 		"kiosk_mode": 0,
-		"hide_item_search": 0
+		"hide_item_search": 0,
+		"rounding_method": _site_rounding_method()
 	}
 
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { effectiveTaxRate } from "./itemTax"
+import { effectiveTaxRate, taxRulesFromResponse } from "./itemTax"
 
 const RULES = [{ charge_type: "On Net Total", account_head: "A", rate: 8.875 }]
 
@@ -36,5 +36,20 @@ describe("effectiveTaxRate", () => {
 		const tax = Math.round(10 * effectiveTaxRate(RULES, { A: 0 }) + 10 * effectiveTaxRate(RULES, { A: 8.875 })) / 100
 		expect(tax).toBe(0.89)
 		expect(Math.round((20 + tax) * 100) / 100).toBe(20.89)
+	})
+})
+
+describe("taxRulesFromResponse", () => {
+	it("returns the rows of a valid response, including an empty profile", () => {
+		const rules = [{ charge_type: "On Net Total", account_head: "A", rate: 8.875 }]
+		expect(taxRulesFromResponse([])).toEqual([])
+		expect(taxRulesFromResponse(rules)).toBe(rules)
+		expect(taxRulesFromResponse({ data: [] })).toEqual([])
+	})
+
+	it("returns null for an invalid response so it is never saved", () => {
+		for (const x of [undefined, null, {}, "x"]) {
+			expect(taxRulesFromResponse(x)).toBe(null)
+		}
 	})
 })

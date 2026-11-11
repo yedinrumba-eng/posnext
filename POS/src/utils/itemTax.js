@@ -40,3 +40,20 @@ export function effectiveTaxRate(taxRules, itemTaxMap) {
 	}
 	return totalRate
 }
+
+/**
+ * Reads the rows of the get_taxes response (D28.15).
+ *
+ * @param {*} result - what the resource returned
+ * @returns {Array|null} the rows (an empty array = the profile has no taxes), or null when the
+ *   response is not valid: the caller must not save it and must use the stored rules
+ */
+export function taxRulesFromResponse(result) {
+	if (Array.isArray(result)) {
+		return result
+	}
+	if (result !== null && typeof result === "object" && Array.isArray(result.data)) {
+		return result.data
+	}
+	return null
+}

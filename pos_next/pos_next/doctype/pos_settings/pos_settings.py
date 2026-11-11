@@ -108,6 +108,8 @@ def get_pos_settings(pos_profile):
 	settings["_global_allow_negative_stock"] = cint(
 		frappe.db.get_single_value("Stock Settings", "allow_negative_stock") or 0
 	)
+	# Rounding method of the site, so the POS cart rounds like the server (not a DocType field)
+	settings["rounding_method"] = frappe.get_system_settings("rounding_method") or "Banker's Rounding (legacy)"
 
 	return settings
 

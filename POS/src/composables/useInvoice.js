@@ -1,8 +1,12 @@
 import { createResource } from "frappe-ui"
 import { computed, ref, toRaw } from "vue"
-import { effectiveTaxRate } from "@/utils/itemTax"
+import { effectiveTaxRate, taxRulesFromResponse } from "@/utils/itemTax"
+import { cartTaxTotals, DEFAULT_ROUNDING_METHOD, normalizeRoundingMethod } from "@/utils/taxRounding"
 import { isOffline, getSetting, setSetting } from "@/utils/offline"
 import { useSerialNumberStore } from "@/stores/serialNumber"
+
+// IndexedDB key of the site's rounding_method, so totals round the same way without network (D28.14)
+const ROUNDING_CACHE_KEY = "pos_next_rounding_method"
 
 
 export function useInvoice() {
@@ -20,6 +24,7 @@ export function useInvoice() {
 	const couponCode = ref(null)
 	const taxRules = ref([]) // Tax rules from POS Profile
 	const taxInclusive = ref(false) // Tax inclusive setting from POS Settings
+	const roundingMethod = ref(DEFAULT_ROUNDING_METHOD) // System Settings.rounding_method of the site
 
 	// Performance: Incrementally maintained aggregates (updated on add/remove/change)
 	// This avoids O(n) array reductions on every reactive change
@@ -124,8 +129,20 @@ export function useInvoice() {
 	//
 	// This ensures tax is not double-counted in inclusive mode!
 	// ========================================================================
+	// Tax and total rounded like the server (ERPNext) so the screen matches the receipt (D28.14)
+	const serverTotals = computed(() =>
+		cartTaxTotals(
+			invoiceItems.value.map((item) => ({
+				net: item.amount,
+				rate: effectiveTaxRate(taxRules.value, item.item_tax_rate),
+			})),
+			roundingMethod.value,
+		),
+	)
 	const subtotal = computed(() => _cachedSubtotal.value)
-	const totalTax = computed(() => _cachedTotalTax.value)
+	const totalTax = computed(() =>
+		taxInclusive.value ? _cachedTotalTax.value : serverTotals.value.taxTotal,
+	)
 	const totalDiscount = computed(
 		() => _cachedTotalDiscount.value + (additionalDiscount.value || 0),
 	)
@@ -136,8 +153,8 @@ export function useInvoice() {
 			// Tax inclusive: Subtotal already includes tax, so don't add it again
 			return _cachedSubtotal.value - discount
 		} else {
-			// Tax exclusive: Add tax on top of subtotal
-			return _cachedSubtotal.value + _cachedTotalTax.value - discount
+			// Tax exclusive: net + tax rounded like the server
+			return serverTotals.value.grandTotal - (additionalDiscount.value || 0)
 		}
 	})
 	const totalPaid = computed(() => _cachedTotalPaid.value)
@@ -933,11 +950,16 @@ export function useInvoice() {
 			let rules
 			try {
 				const result = await getTaxesResource.submit({ pos_profile: profileName })
-				rules = result?.data || result || []
-				try {
-					await setSetting(cacheKey, rules)
-				} catch (cacheError) {
-					console.warn("Failed to cache tax rules:", cacheError)
+				rules = taxRulesFromResponse(result)
+				if (rules === null) {
+					// Invalid response: keep the stored rules, never overwrite them
+					rules = await getSetting(cacheKey, [])
+				} else {
+					try {
+						await setSetting(cacheKey, rules)
+					} catch (cacheError) {
+						console.warn("Failed to cache tax rules:", cacheError)
+					}
 				}
 			} catch {
 				rules = await getSetting(cacheKey, [])
@@ -947,6 +969,20 @@ export function useInvoice() {
 			// Load tax inclusive setting from POS Settings if provided
 			if (posSettings && posSettings.tax_inclusive !== undefined) {
 				taxInclusive.value = posSettings.tax_inclusive || false
+			}
+
+			// Rounding method of the site: from the POS Settings, else the one stored for offline use
+			const method = normalizeRoundingMethod(posSettings?.rounding_method)
+			if (method) {
+				roundingMethod.value = method
+				try {
+					await setSetting(ROUNDING_CACHE_KEY, method)
+				} catch (cacheError) {
+					console.warn("Failed to cache rounding method:", cacheError)
+				}
+			} else {
+				roundingMethod.value =
+					normalizeRoundingMethod(await getSetting(ROUNDING_CACHE_KEY, null)) ?? roundingMethod.value
 			}
 
 			// Recalculate all items with new tax rules and tax inclusive setting
