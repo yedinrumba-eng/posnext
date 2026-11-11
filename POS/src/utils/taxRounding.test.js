@@ -5,6 +5,36 @@ const BANKERS = "Banker's Rounding"
 const LEGACY = "Banker's Rounding (legacy)"
 const COMMERCIAL = "Commercial Rounding"
 
+// Exact oracle of _round_away_from_zero(x, 2) in integer cents, BigInt only (no toFixed, no pyRound). The integer
+// oracle of tests 7 and 8 cannot see the float noise of the tax sum, this one can.
+function commercialCentsOracle(x) {
+	if (x === 0) {
+		return 0
+	}
+	const f64 = new Float64Array(1)
+	const b64 = new BigUint64Array(f64.buffer)
+	f64[0] = Math.abs(x)
+	const bits = b64[0]
+	const b = Number(bits >> 52n)
+	const f = bits & ((1n << 52n) - 1n)
+	const mantissa = b === 0 ? f : f | (1n << 52n)
+	const e = (b === 0 ? 1 : b) - 1075
+	// |x| = mantissa * 2^e and |x| + ulp(|x|) = (mantissa + 1) * 2^e, both exact
+	const n = (mantissa + 1n) * 100n
+	let q
+	if (e >= 0) {
+		q = n << BigInt(e)
+	} else {
+		const d = 1n << BigInt(-e)
+		q = n / d
+		const twice = 2n * (n % d)
+		if (twice > d || (twice === d && q % 2n === 1n)) {
+			q += 1n
+		}
+	}
+	return Math.sign(x) * Number(q)
+}
+
 // Integer oracle of the server semantics (Valores fijados E2): tax in cents = exact round of 71 * c / 800.
 function expectedTaxCents(c, commercial) {
 	const f = Math.floor((71 * c) / 800)
@@ -123,5 +153,75 @@ describe("cartTaxTotals", () => {
 			}
 		}
 		expect(diffs).toBe(0)
+	})
+
+	it("$24.99 + $275.01 at 8.875%: the exact tie goes to even like the server (B32)", () => {
+		const lines = [
+			{ net: 24.99, rate: 8.875 },
+			{ net: 275.01, rate: 8.875 },
+		]
+		expect(cartTaxTotals(lines, COMMERCIAL)).toEqual({ netTotal: 300, taxTotal: 26.62, grandTotal: 326.62 })
+		expect(cartTaxTotals(lines, BANKERS)).toEqual({ netTotal: 300, taxTotal: 26.62, grandTotal: 326.62 })
+		expect(cartTaxTotals(lines, LEGACY)).toEqual({ netTotal: 300, taxTotal: 26.63, grandTotal: 326.63 })
+	})
+
+	it("$35.98 + $264.02 at 8.875% with Commercial Rounding gives 26.62 (B32)", () => {
+		const lines = [
+			{ net: 35.98, rate: 8.875 },
+			{ net: 264.02, rate: 8.875 },
+		]
+		expect(cartTaxTotals(lines, COMMERCIAL)).toEqual({ netTotal: 300, taxTotal: 26.62, grandTotal: 326.62 })
+	})
+
+	it("$699.99 + $0.01 at 8.875% with Commercial Rounding gives 62.12", () => {
+		const lines = [
+			{ net: 699.99, rate: 8.875 },
+			{ net: 0.01, rate: 8.875 },
+		]
+		expect(cartTaxTotals(lines, COMMERCIAL)).toEqual({ netTotal: 700, taxTotal: 62.12, grandTotal: 762.12 })
+	})
+
+	it("a weighed net of 25.624999999999996 rounds to 25.62 with Commercial Rounding (B33)", () => {
+		expect(roundCurrency(25.624999999999996, 2, COMMERCIAL)).toBe(25.62)
+		const lines = [
+			{ net: 10.80469, rate: 0 },
+			{ net: 73.02645, rate: 8.875 },
+			{ net: 5.06826, rate: 0 },
+			{ net: 25.624999999999996, rate: 8.875 },
+		]
+		expect(cartTaxTotals(lines, COMMERCIAL)).toEqual({ netTotal: 114.52, taxTotal: 8.76, grandTotal: 123.28 })
+		expect(cartTaxTotals(lines, BANKERS)).toEqual({ netTotal: 114.52, taxTotal: 8.76, grandTotal: 123.28 })
+		expect(cartTaxTotals(lines, LEGACY)).toEqual({ netTotal: 114.53, taxTotal: 8.76, grandTotal: 123.29 })
+	})
+
+	it("sweep of two taxed lines that add up to $300 with Commercial Rounding: 0 differences (B32)", () => {
+		let diffs = 0
+		let low = 0
+		let high = 0
+		for (let a = 1; a <= 29999; a++) {
+			const n1 = commercialCentsOracle(a / 100) / 100
+			const n2 = commercialCentsOracle((30000 - a) / 100) / 100
+			let tax = 0
+			tax += (8.875 / 100) * n1
+			tax += (8.875 / 100) * n2
+			const t = commercialCentsOracle(tax)
+			if (t === 2662) {
+				low++
+			}
+			if (t === 2663) {
+				high++
+			}
+			const r = cartTaxTotals(
+				[
+					{ net: a / 100, rate: 8.875 },
+					{ net: (30000 - a) / 100, rate: 8.875 },
+				],
+				COMMERCIAL,
+			)
+			if (r.netTotal !== 300 || Math.round(r.taxTotal * 100) !== t || Math.round(r.grandTotal * 100) !== 30000 + t) {
+				diffs++
+			}
+		}
+		expect([diffs, low, high]).toEqual([0, 7128, 22871])
 	})
 })

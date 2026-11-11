@@ -7,7 +7,7 @@
  * Plain toFixed()/Math.round() are NOT enough: (2.675).toFixed(2) is "2.67" and Frappe gives 2.68.
  *
  * Python -> JS equivalences used (and no others):
- *   round(x, n) with n > 0  -> Number(x.toFixed(n))
+ *   round(x, n) with n > 0  -> Number(x.toFixed(n)) (except _round_away_from_zero: pyRound, exact ties to even)
  *   round(x)                -> Math.round(x)  (only reached outside the .5 ties, solved before)
  *   math.ulp(a), a > 0      -> nextUp(a) - a
  *   Decimal(num).quantize(..., ROUND_HALF_UP) -> Number(num.toFixed(precision))
@@ -52,6 +52,17 @@ function bankersRoundingLegacy(num, precision) {
 	return precision ? num / multiplier : num
 }
 
+// Python round(x, n), n > 0, on the exact binary value: exact ties go to even, the rest is toFixed.
+function pyRound(x, n) {
+	const scaled = x * 2 ** (n + 1)
+	if (Number.isInteger(scaled) && Math.abs(scaled) % 2 === 1) {
+		const lower = Math.floor(Math.abs(x) * 10 ** n)
+		const even = lower % 2 === 0 ? lower : lower + 1
+		return (Math.sign(x) * even) / 10 ** n
+	}
+	return Number(x.toFixed(n))
+}
+
 // _round_away_from_zero (data.py:1282-1313)
 function roundAwayFromZero(num, precision) {
 	if (num === 0) {
@@ -65,7 +76,7 @@ function roundAwayFromZero(num, precision) {
 		return Number(num.toFixed(precision))
 	}
 
-	return Number((num + Math.sign(num) * epsilon).toFixed(precision))
+	return pyRound(num + Math.sign(num) * epsilon, precision)
 }
 
 // _bankers_rounding (data.py:1316-1335)
