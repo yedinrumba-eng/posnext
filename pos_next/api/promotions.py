@@ -199,7 +199,7 @@ def get_promotion_details(scheme_name):
 		frappe.throw(_("Promotion or Pricing Rule {0} not found").format(scheme_name))
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_promotion(data):
 	"""
 	Create a promotional scheme.
@@ -340,7 +340,7 @@ def create_promotion(data):
 		frappe.throw(_("Failed to create promotion: {0}").format(str(e)))
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def update_promotion(scheme_name, data):
 	"""
 	Update an existing promotional scheme.
@@ -419,7 +419,7 @@ def update_promotion(scheme_name, data):
 		frappe.throw(_("Failed to update promotion: {0}").format(str(e)))
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def toggle_promotion(scheme_name, disable=None):
 	"""Enable or disable a promotional scheme."""
 	check_promotion_permissions("write")
@@ -453,7 +453,7 @@ def toggle_promotion(scheme_name, disable=None):
 		frappe.throw(_("Failed to toggle promotion: {0}").format(str(e)))
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def delete_promotion(scheme_name):
 	"""Delete a promotional scheme and its pricing rules."""
 	check_promotion_permissions("delete")
@@ -631,7 +631,7 @@ def get_coupon_details(coupon_name):
 	return data
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_coupon(data):
 	"""
 	Create a new coupon.
@@ -728,7 +728,7 @@ def create_coupon(data):
 		frappe.throw(_("Failed to create coupon: {0}").format(str(e)))
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def update_coupon(coupon_name, data):
 	"""
 	Update an existing coupon.
@@ -790,7 +790,7 @@ def update_coupon(coupon_name, data):
 		frappe.throw(_("Failed to update coupon: {0}").format(str(e)))
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def toggle_coupon(coupon_name, disabled=None):
 	"""Enable or disable a coupon."""
 	check_promotion_permissions("write")
@@ -825,7 +825,7 @@ def toggle_coupon(coupon_name, disabled=None):
 		frappe.throw(_("Failed to toggle coupon: {0}").format(str(e)))
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def delete_coupon(coupon_name):
 	"""Delete a coupon."""
 	check_promotion_permissions("delete")
@@ -861,7 +861,7 @@ def delete_coupon(coupon_name):
 # REFERRAL CODE APIs
 # =============================================================================
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def apply_referral_code(referral_code, customer):
 	"""
 	Apply a referral code for a customer - generates coupons for both referrer and referee

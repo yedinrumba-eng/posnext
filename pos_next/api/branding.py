@@ -78,7 +78,7 @@ def get_default_config():
 	}
 
 
-@frappe.whitelist(allow_guest=False)
+@frappe.whitelist(methods=["POST"])
 def validate_branding(client_signature=None, brand_name=None, brand_url=None):
 	"""
 	Validate branding integrity from client
@@ -128,7 +128,7 @@ def validate_branding(client_signature=None, brand_name=None, brand_url=None):
 		return {"valid": False, "error": str(e)}
 
 
-@frappe.whitelist(allow_guest=False)
+@frappe.whitelist(methods=["POST"])
 def log_client_event(event_type=None, details=None):
 	"""
 	Log client-side events (clicks, removals, modifications)

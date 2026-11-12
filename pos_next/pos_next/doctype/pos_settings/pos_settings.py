@@ -124,7 +124,7 @@ def create_default_settings(pos_profile):
 	return doc.as_dict()
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def update_pos_settings(pos_profile, settings):
 	"""Update POS Settings for a POS Profile"""
 	import json

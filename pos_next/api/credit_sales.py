@@ -216,7 +216,7 @@ def get_available_credit(customer, company, pos_profile=None):
 	return total_credit
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def redeem_customer_credit(invoice_name, customer_credit_dict):
 	"""
 	Redeem customer credit by creating Journal Entries.
@@ -403,7 +403,7 @@ def get_credit_redeem_remark(invoice_name):
 	return f"POS Next credit redemption for invoice {invoice_name}"
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def cancel_credit_journal_entries(invoice_name):
 	"""
 	Cancel journal entries created for credit redemption when invoice is cancelled.

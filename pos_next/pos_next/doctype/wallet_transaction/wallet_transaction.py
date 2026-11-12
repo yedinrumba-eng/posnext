@@ -176,7 +176,7 @@ class WalletTransaction(AccountsController):
 		return None
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_wallet_credit(wallet, amount, source_type="Manual Adjustment", remarks=None,
 						 reference_doctype=None, reference_name=None, submit=True):
 	"""
@@ -236,7 +236,7 @@ def create_wallet_credit(wallet, amount, source_type="Manual Adjustment", remark
 	return transaction
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def credit_loyalty_points_to_wallet(customer, company, loyalty_points, conversion_factor=None):
 	"""
 	Convert loyalty points to wallet credit.

@@ -91,7 +91,7 @@ def get_allowed_locales_from_settings():
 		return default_locales
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def change_user_language(locale):
 	"""
 	Change the language preference for the current user.

@@ -256,7 +256,7 @@ def get_customer_wallet(customer, company=None):
 	return wallet
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def get_or_create_wallet(customer, company, pos_settings=None):
 	"""Get existing wallet or create a new one."""
 
@@ -438,7 +438,7 @@ def get_wallet_info(customer, company, pos_profile=None):
 	return result
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_manual_wallet_credit(customer, company, amount, remarks=None):
 	"""
 	Create a manual wallet credit (for admin use).

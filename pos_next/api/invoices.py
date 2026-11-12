@@ -303,7 +303,7 @@ def validate_return_items(original_invoice_name, return_items, doctype="Sales In
 # ==========================================
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def update_invoice(data):
     """Create or update invoice draft (Step 1)."""
     try:
@@ -745,7 +745,7 @@ def check_offline_invoice_synced(offline_id):
     return result
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def submit_invoice(invoice=None, data=None):
     """Submit the invoice (Step 2)."""
     # Handle different calling conventions
@@ -1111,7 +1111,7 @@ def get_draft_invoices(pos_opening_shift, doctype="Sales Invoice"):
     return data
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def delete_invoice(invoice):
     """Delete draft invoice."""
     doctype = "Sales Invoice"
@@ -1127,7 +1127,7 @@ def delete_invoice(invoice):
     return _("Invoice {0} Deleted").format(invoice)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def cleanup_old_drafts(pos_profile=None, max_age_hours=24):
     """
     Clean up old draft invoices to prevent stock reservation issues.
@@ -1135,17 +1135,26 @@ def cleanup_old_drafts(pos_profile=None, max_age_hours=24):
     """
     from datetime import datetime, timedelta
 
-    doctype = "Sales Invoice"
-    cutoff_time = datetime.now() - timedelta(hours=int(max_age_hours))
+    from pos_next.api.partial_payments import _has_pos_profile_access
 
+    if not pos_profile:
+        frappe.throw(_("POS Profile is required"))
+    if not _has_pos_profile_access(pos_profile):
+        frappe.throw(_("You do not have access to this POS Profile"))
+
+    doctype = "Sales Invoice"
+    # Never less than 1 hour: a fresh draft may still be in the cashier's cart.
+    hours = max(cint(max_age_hours), 1)
+    cutoff_time = datetime.now() - timedelta(hours=hours)
+
+    # Only the caller's own drafts of this POS Profile. ignore_permissions below is safe
+    # because of this filter: the cashier has no delete permission on Sales Invoice.
     filters = {
         "docstatus": 0,  # Draft only
         "modified": ["<", cutoff_time.strftime("%Y-%m-%d %H:%M:%S")],
+        "owner": frappe.session.user,
+        "pos_profile": pos_profile,
     }
-
-    # Optionally filter by POS profile
-    if pos_profile:
-        filters["pos_profile"] = pos_profile
 
     # Get old drafts
     old_drafts = frappe.get_all(

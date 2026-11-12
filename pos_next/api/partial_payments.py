@@ -753,7 +753,7 @@ def get_partial_payment_details(invoice_name: str) -> Dict:
     }
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def add_payment_to_partial_invoice(invoice_name: str, payments) -> Dict:
     """
     Add payments to a partially paid invoice via Payment Entry.

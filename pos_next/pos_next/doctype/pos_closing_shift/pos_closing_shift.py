@@ -576,7 +576,7 @@ def make_closing_shift_from_opening(opening_shift):
     return result
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def submit_closing_shift(closing_shift):
     closing_shift = json.loads(closing_shift)
     closing_shift_doc = frappe.get_doc(closing_shift)

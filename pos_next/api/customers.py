@@ -55,7 +55,7 @@ def get_customers(search_term="", pos_profile=None, limit=20):
         frappe.throw(_("Error fetching customers: {0}").format(str(e)))
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_customer(customer_name, mobile_no=None, email_id=None, customer_group="Individual", territory="All Territories", company=None):
     """
     Create a new customer from POS.

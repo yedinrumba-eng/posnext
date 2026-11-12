@@ -246,7 +246,7 @@ def get_default_customer(pos_profile):
 		return {"customer": None}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def update_warehouse(pos_profile, warehouse):
 	"""Update warehouse in POS Profile"""
 	try:
@@ -424,7 +424,7 @@ def get_create_pos_profile(*args, **kwargs):
 	except Exception as e:
 		frappe.throw(_("Error getting create POS profile: {0}").format(str(e)))
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_pos_profile(*arg ,**parameters):
 	"""
 	Create a new POS Profile
@@ -509,7 +509,7 @@ def create_pos_profile(*arg ,**parameters):
 	pos_profile.insert()
 	return pos_profile
 
-@frappe.whitelist()		
+@frappe.whitelist(methods=["POST"])
 def update_pos_profile(*args, **parameters):
 	"""
 		Update an existing POS Profile
@@ -582,7 +582,7 @@ def update_pos_profile(*args, **parameters):
 	pos_profile.save()
 	return pos_profile
 	
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def delete_pos_profile(pos_profile):
 	"""
 		Delete a POS Profile

@@ -174,7 +174,7 @@ def get_pending_wallet_payments(customer, exclude_invoice=None):
 	return pending_amount
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_customer_wallet(customer, company, account=None):
 	"""
 	Create a wallet for a customer.
@@ -238,7 +238,7 @@ def get_default_wallet_account(company):
 	return wallet_account
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def get_or_create_wallet(customer, company):
 	"""Get existing wallet or create a new one"""
 	wallet = get_customer_wallet(customer, company)
