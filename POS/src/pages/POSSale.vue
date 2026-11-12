@@ -545,6 +545,14 @@
 				@option-selected="handleOptionSelected"
 			/>
 
+			<!-- Typed weight dialog (S9.1) -->
+			<WeightDialog
+				v-model="weightDialogOpen"
+				:item="weightItem"
+				:currency="shiftStore.profileCurrency"
+				@confirm="handleWeightConfirmed"
+			/>
+
 			<!-- Invoice History Dialog -->
 			<InvoiceHistoryDialog
 				v-model="uiStore.showHistoryDialog"
@@ -943,6 +951,7 @@ import DraftInvoicesDialog from "@/components/sale/DraftInvoicesDialog.vue";
 import InvoiceCart from "@/components/sale/InvoiceCart.vue";
 import InvoiceHistoryDialog from "@/components/sale/InvoiceHistoryDialog.vue";
 import ItemSelectionDialog from "@/components/sale/ItemSelectionDialog.vue";
+import WeightDialog from "@/components/sale/WeightDialog.vue";
 import ItemsSelector from "@/components/sale/ItemsSelector.vue";
 import OffersDialog from "@/components/sale/OffersDialog.vue";
 import OfflineInvoicesDialog from "@/components/sale/OfflineInvoicesDialog.vue";
@@ -959,6 +968,7 @@ import { useLocale } from "@/composables/useLocale";
 import { session } from "@/data/session";
 import { useUserData } from "@/data/user";
 import { parseError } from "@/utils/errorHandler";
+import { needsWeightPrompt } from "@/utils/weight";
 import { offlineWorker } from "@/utils/offline/workerClient";
 import { printInvoice, printInvoiceByName } from "@/utils/printInvoice";
 import { Button, Dialog, createResource } from "frappe-ui";
@@ -1630,7 +1640,27 @@ function handleShiftClosed() {
 	}
 }
 
+const weightDialogOpen = ref(false);
+const weightItem = ref(null);
+
+function handleWeightConfirmed(weight) {
+	try {
+		cartStore.addItem(weightItem.value, weight, false, shiftStore.currentProfile);
+	} catch (error) {
+		uiStore.showError(
+			__("Insufficient Stock"),
+			error.message,
+			__("Item: {0}", [weightItem.value.item_code])
+		);
+	}
+}
+
 function handleItemSelected(item, autoAdd = false) {
+	if (needsWeightPrompt(posSettingsStore.kioskMode, item)) {
+		weightItem.value = item;
+		weightDialogOpen.value = true;
+		return;
+	}
 	// Auto-add mode
 	if (autoAdd) {
 		try {

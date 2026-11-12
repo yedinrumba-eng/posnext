@@ -11,7 +11,7 @@ from erpnext.stock.get_item_details import get_item_details as erpnext_get_item_
 from erpnext.stock.get_item_details import get_item_tax_map, get_item_tax_template
 from frappe import _, as_json
 from frappe.query_builder import DocType, functions as fn
-from frappe.utils import flt, nowdate
+from frappe.utils import cint, flt, nowdate
 
 ITEM_RESULT_FIELDS = [
 	"name as item_code",
@@ -302,6 +302,12 @@ def get_item_detail(item, doc=None, warehouse=None, price_list=None, company=Non
 			uoms.append({"uom": stock_uom, "conversion_factor": 1.0})
 
 	res["item_uoms"] = uoms
+
+	res["uom_must_be_whole_number"] = cint(
+		frappe.get_cached_value("UOM", res.get("uom") or res.get("stock_uom"), "must_be_whole_number")
+		if (res.get("uom") or res.get("stock_uom"))
+		else 1
+	)
 
 	return res
 
@@ -1181,6 +1187,15 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 					"Bundle Availability Warning"
 				)
 
+		# UOMs that must be whole numbers (weight prompt needs this, S9.1)
+		uoms = list({item.get("stock_uom") for item in items if item.get("stock_uom")})
+		whole = {
+			u.name: u.must_be_whole_number
+			for u in frappe.get_all(
+				"UOM", filters={"name": ["in", uoms]}, fields=["name", "must_be_whole_number"]
+			)
+		} if uoms else {}
+
 		# Enrich items with price, stock, barcode, and UOM data
 		for item in items:
 			stock_uom = item.get("stock_uom")
@@ -1247,6 +1262,7 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 			item["rate"] = display_rate
 			item["price_list_rate"] = display_rate
 			item["uom"] = display_uom
+			item["uom_must_be_whole_number"] = cint(whole.get(display_uom, 1))
 			item["price_uom"] = display_uom
 			item["conversion_factor"] = 1
 			item["price_list_rate_price_uom"] = display_rate

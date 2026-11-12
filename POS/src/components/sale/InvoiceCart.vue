@@ -1727,7 +1727,8 @@ function handleQuantityBlur(item) {
 		emit("remove-item", item.item_code, item.uom);
 	} else {
 		// Round to 4 decimal places for consistency
-		const roundedQty = Math.round(item.quantity * 10000) / 10000;
+		// 3 decimals: server float_precision (S9.1)
+		const roundedQty = Math.round(item.quantity * 1000) / 1000;
 		if (roundedQty !== item.quantity) {
 			emit("update-quantity", item.item_code, roundedQty, item.uom);
 		}
