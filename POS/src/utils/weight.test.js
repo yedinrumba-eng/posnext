@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { appendWeightKey, needsWeightPrompt, parseWeight } from "./weight"
+import { appendWeightKey, mergeQuantity, needsWeightPrompt, parseWeight } from "./weight"
 
 const fractional = { uom_must_be_whole_number: 0 }
 
@@ -65,5 +65,15 @@ describe("parseWeight", () => {
 		expect(parseWeight(".")).toBeNull()
 		expect(parseWeight("")).toBeNull()
 		expect(parseWeight("1.2345")).toBeNull()
+	})
+})
+
+describe("mergeQuantity", () => {
+	it("rounds merged fractional quantities to 3 decimals and keeps integers exact", () => {
+		expect(mergeQuantity(1.1, 2.2)).toBe(3.3)
+		expect(mergeQuantity(1.35, 1.35)).toBe(2.7)
+		expect(mergeQuantity(0.1, 0.2)).toBe(0.3)
+		expect(mergeQuantity(1, 1)).toBe(2)
+		expect(mergeQuantity(2, 3)).toBe(5)
 	})
 })

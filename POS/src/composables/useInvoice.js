@@ -2,6 +2,7 @@ import { createResource } from "frappe-ui"
 import { computed, ref, toRaw } from "vue"
 import { effectiveTaxRate, taxRulesFromResponse } from "@/utils/itemTax"
 import { cartTaxTotals, DEFAULT_ROUNDING_METHOD, normalizeRoundingMethod } from "@/utils/taxRounding"
+import { mergeQuantity } from "@/utils/weight"
 import { isOffline, getSetting, setSetting } from "@/utils/offline"
 import { useSerialNumberStore } from "@/stores/serialNumber"
 
@@ -196,7 +197,7 @@ export function useInvoice() {
 				// For serial items, quantity must match serial count
 				existingItem.quantity = allSerials.length
 			} else {
-				existingItem.quantity += quantity
+				existingItem.quantity = mergeQuantity(existingItem.quantity, quantity)
 			}
 			recalculateItem(existingItem)
 

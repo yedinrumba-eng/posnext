@@ -45,3 +45,13 @@ export function parseWeight(text) {
 	const value = Number(text)
 	return value > 0 ? value : null
 }
+
+/**
+ * Adds a quantity to a cart line. Integers add exactly; fractional weights are rounded
+ * to MAX_WEIGHT_DECIMALS so 1.1 + 2.2 gives 3.3, not 3.3000000000000003 (D29.16).
+ */
+export function mergeQuantity(current, added) {
+	if (Number.isInteger(current) && Number.isInteger(added)) return current + added
+	const factor = 10 ** MAX_WEIGHT_DECIMALS
+	return Math.round((current + added) * factor) / factor
+}
