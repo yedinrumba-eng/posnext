@@ -29,7 +29,7 @@ const bits64 = new BigUint64Array(float64.buffer)
 // math.ulp(a) for a finite a > 0: distance to the next double.
 function ulp(a) {
 	float64[0] = a
-	bits64[0] += 1n
+	bits64[0] += BigInt(1)
 	return float64[0] - a
 }
 
