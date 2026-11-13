@@ -140,7 +140,7 @@ def create_opening_shift(pos_profile, company, balance_details):
 	return data
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def get_closing_shift_data(opening_shift):
 	"""Get data for closing shift"""
 	from pos_next.pos_next.doctype.pos_closing_shift.pos_closing_shift import make_closing_shift_from_opening

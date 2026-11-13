@@ -487,7 +487,7 @@ def _process_invoice(invoice, invoice_field, company_currency, cash_mode, paymen
     return transaction
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def make_closing_shift_from_opening(opening_shift):
     opening_shift = json.loads(opening_shift)
     doctype = "Sales Invoice"
