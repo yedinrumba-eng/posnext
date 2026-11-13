@@ -112,6 +112,10 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 	const allowPartialPayment = computed(() =>
 		Boolean(settings.value.allow_partial_payment),
 	)
+	// Mode of payment whose payments remove sales tax from SNAP-eligible items ("" = off)
+	const snapTaxExemptModeOfPayment = computed(
+		() => settings.value.snap_tax_exempt_mode_of_payment || "",
+	)
 
 	// Computed - Display Settings
 	const defaultCardView = computed(() =>
@@ -404,6 +408,7 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 		allowReturn,
 		allowWriteOffChange,
 		allowPartialPayment,
+		snapTaxExemptModeOfPayment,
 
 		// Computed - Display Settings
 		defaultCardView,

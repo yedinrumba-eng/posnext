@@ -26,6 +26,8 @@
   "allow_return",
   "allow_write_off_change",
   "allow_partial_payment",
+  "snap_tax_exempt_mode_of_payment",
+  "enforce_server_guard",
   "enable_sales_persons",
   "section_break_display",
   "default_card_view",
@@ -225,6 +227,20 @@
    "fieldtype": "Check",
    "label": "Allow Partial Payment",
    "description": "Enable partial payment for invoices"
+  },
+  {
+   "fieldname": "snap_tax_exempt_mode_of_payment",
+   "fieldtype": "Link",
+   "label": "SNAP Tax-Exempt Mode of Payment",
+   "options": "Mode of Payment",
+   "description": "Payments with this mode remove sales tax from SNAP-eligible items. Empty = off."
+  },
+  {
+   "default": "1",
+   "fieldname": "enforce_server_guard",
+   "fieldtype": "Check",
+   "label": "Enforce POS Prices and Payments on the Server",
+   "description": "On: the server sets price, tax and UOM factor and checks discounts, payments and returns for users without the Dueño or System Manager role. Off: only the POS Profile user check runs."
   },
   {
    "default": "Disabled",
@@ -508,7 +524,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 0,
  "links": [],
- "modified": "2026-11-10 00:00:00.000000",
+ "modified": "2026-11-13 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "POS Next",
  "name": "POS Settings",

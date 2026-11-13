@@ -262,10 +262,18 @@
 								<span class="text-gray-600 text-start">{{ __('Discount') }}</span>
 								<span class="font-medium text-red-600 text-end">-{{ formatCurrency(discountAmount) }}</span>
 							</div>
+							<!-- SNAP/EBT sales tax exemption -->
+							<div v-if="snap.exemption > 0" class="flex items-center justify-between text-sm">
+								<span class="text-gray-600 text-start">{{ __('SNAP tax exemption') }}</span>
+								<span class="font-medium text-green-600 text-end">-{{ formatCurrency(snap.exemption) }}</span>
+							</div>
+							<div v-if="snap.overLimit" class="text-sm text-red-600 text-start">
+								{{ __('EBT/SNAP amount exceeds the SNAP-eligible total') }}
+							</div>
 							<!-- Grand Total -->
 							<div class="flex items-center justify-between pt-2 mt-1 border-t border-gray-300">
 								<span :class="['font-bold text-gray-900 text-start', isCompactMode ? 'text-sm' : 'text-base']">{{ __('Grand Total') }}</span>
-								<span :class="['font-bold text-gray-900 text-end', dynamicTextSize.grandTotal]">{{ formatCurrency(grandTotal) }}</span>
+								<span :class="['font-bold text-gray-900 text-end', dynamicTextSize.grandTotal]">{{ formatCurrency(effectiveGrandTotal) }}</span>
 							</div>
 						</div>
 
@@ -683,6 +691,8 @@
 
 <script setup>
 import { usePOSSettingsStore } from "@/stores/posSettings"
+import { usePOSCartStore } from "@/stores/posCart"
+import { snapExemption } from "@/utils/snapExemption"
 import { formatCurrency as formatCurrencyUtil, getCurrencySymbol } from "@/utils/currency"
 import { getPaymentIcon } from "@/utils/payment"
 import { offlineWorker } from "@/utils/offline/workerClient"
@@ -694,6 +704,7 @@ import { useLongPress } from "@/composables/useLongPress"
 
 const log = logger.create('PaymentDialog')
 const settingsStore = usePOSSettingsStore()
+const cartStore = usePOSCartStore()
 const { showWarning } = useToast()
 
 const props = defineProps({
@@ -1329,13 +1340,35 @@ const calculatedAdditionalDiscount = computed(() => {
 	return round2(localAdditionalDiscount.value)
 })
 
+// SNAP/EBT: sales tax removed from the eligible lines paid with the configured mode of payment.
+// The server computes the same number on save; this only shows it.
+const snap = computed(() => {
+	const mode = settingsStore.snapTaxExemptModeOfPayment
+	const ebtPaid = mode
+		? paymentEntries.value
+				.filter((entry) => entry.mode_of_payment === mode)
+				.reduce((sum, entry) => sum + (entry.amount || 0), 0)
+		: 0
+	return snapExemption({
+		lines: props.items.map((item) => ({
+			net: item.amount,
+			taxRate: item.tax_rate,
+			snapEligible: !!item.snap_eligible,
+		})),
+		ebtPaid,
+		method: cartStore.roundingMethod,
+	})
+})
+
+const effectiveGrandTotal = computed(() => round2(props.grandTotal - snap.value.exemption))
+
 const remainingAmount = computed(() => {
-	const remaining = round2(props.grandTotal) - totalPaid.value
+	const remaining = effectiveGrandTotal.value - totalPaid.value
 	return remaining > 0 ? round2(remaining) : 0
 })
 
 const changeAmount = computed(() => {
-	const change = totalPaid.value - round2(props.grandTotal)
+	const change = totalPaid.value - effectiveGrandTotal.value
 	return change > 0 ? round2(change) : 0
 })
 
@@ -1731,7 +1764,7 @@ function completePayment() {
 		return
 	}
 
-	const isPartial = totalPaid.value < props.grandTotal
+	const isPartial = totalPaid.value < effectiveGrandTotal.value
 
 	const paymentData = {
 		payments: paymentEntries.value,

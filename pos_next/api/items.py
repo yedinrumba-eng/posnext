@@ -1087,6 +1087,17 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 		# Prepare maps for enrichment
 		item_codes = [item["item_code"] for item in items]
 		tax_rates = _get_item_tax_rates(pos_profile_doc, item_codes) if item_codes else {}
+		# SNAP eligibility (Item.snap_eligible exists only on sites with SNAP tracking on)
+		snap_map = {}
+		if item_codes and frappe.get_meta("Item").has_field("snap_eligible"):
+			snap_map = {
+				row["name"]: cint(row["snap_eligible"])
+				for row in frappe.get_all(
+					"Item",
+					filters={"name": ["in", item_codes]},
+					fields=["name", "snap_eligible"],
+				)
+			}
 		barcode_map = {}
 		conversion_map = defaultdict(dict)  # parent -> {uom: factor}
 		uom_map = {}  # parent -> [ {uom, conversion_factor}, ... ]
@@ -1323,6 +1334,7 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 
 			# Item Tax Template and per-account rates (same rule as ERPNext, D28.13)
 			item["item_tax_template"], item["item_tax_rate"] = tax_rates.get(item["item_code"], ("", {}))
+			item["snap_eligible"] = snap_map.get(item["item_code"], 0)
 
 		return items
 	except Exception as e:

@@ -1,6 +1,7 @@
 import { createResource } from "frappe-ui"
 import { computed, ref, toRaw } from "vue"
 import { effectiveTaxRate, taxRulesFromResponse } from "@/utils/itemTax"
+import { lineAmounts } from "@/utils/lineMath"
 import { cartTaxTotals, DEFAULT_ROUNDING_METHOD, normalizeRoundingMethod } from "@/utils/taxRounding"
 import { mergeQuantity } from "@/utils/weight"
 import { isOffline, getSetting, setSetting } from "@/utils/offline"
@@ -238,6 +239,8 @@ export function useInvoice() {
 				// Per-item tax from the server (D28.13)
 				item_tax_rate: item.item_tax_rate || {},
 				item_tax_template: item.item_tax_template || "",
+				// SNAP/EBT eligibility from the server (S10.8b)
+				snap_eligible: item.snap_eligible ? 1 : 0,
 			}
 			invoiceItems.value.push(newItem)
 			// Recalculate the newly added item to apply taxes
@@ -561,13 +564,24 @@ export function useInvoice() {
 			netAmount = grossAmount / (1 + totalTaxRate / 100)
 			taxAmount = grossAmount - netAmount
 		} else {
-			// Tax-exclusive: Calculate tax on top of net amount
-			netAmount = baseAmount - discountAmount
+			// Tax-exclusive: same cents as ERPNext (taxes_and_totals.py:186-196): the unit
+			// discount and the unit rate are rounded, then the line net
+			const amounts = lineAmounts({
+				priceListRate,
+				qty: item.quantity,
+				discountPercentage: item.discount_percentage,
+				method: roundingMethod.value,
+			})
+			item.discount_percentage = amounts.discountPercentage
+			item.discount_amount = amounts.lineDiscount
+			item.unit_rate = amounts.unitRate
+			netAmount = amounts.net
 			taxAmount = (netAmount * totalTaxRate) / 100
 		}
 
 		// Update item fields
 		item.tax_amount = taxAmount
+		item.tax_rate = totalTaxRate
 		item.rate = priceListRate  // Preserve original price for display
 		item.amount = netAmount    // Net amount for backend calculations
 	}
@@ -659,7 +673,7 @@ export function useInvoice() {
 				// Tax-exclusive mode: Send net amount (after discount, before tax addition)
 				rate: taxInclusive.value
 					? ((item.price_list_rate || item.rate) - (item.discount_amount || 0) / (item.quantity || 1))
-					: (item.quantity > 0 ? item.amount / item.quantity : item.rate),
+					: (item.unit_rate ?? (item.quantity > 0 ? item.amount / item.quantity : item.rate)),
 				price_list_rate: item.price_list_rate || item.rate,
 				uom: item.uom,
 				warehouse: item.warehouse,
@@ -720,7 +734,7 @@ export function useInvoice() {
 					// Tax-exclusive mode: Send net amount (after discount, before tax addition)
 					rate: taxInclusive.value
 						? ((item.price_list_rate || item.rate) - (item.discount_amount || 0) / (item.quantity || 1))
-						: (item.quantity > 0 ? item.amount / item.quantity : item.rate),
+						: (item.unit_rate ?? (item.quantity > 0 ? item.amount / item.quantity : item.rate)),
 					price_list_rate: item.price_list_rate || item.rate,
 					uom: item.uom,
 					warehouse: item.warehouse,
@@ -1025,6 +1039,7 @@ export function useInvoice() {
 		couponCode,
 		taxRules,
 		taxInclusive,
+		roundingMethod,
 
 		// Computed
 		subtotal,
