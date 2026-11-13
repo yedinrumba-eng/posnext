@@ -14,6 +14,7 @@ BOOTSTRAP = PACKAGE_ROOT / "api" / "bootstrap.py"
 POS_SETTINGS_JSON = PACKAGE_ROOT / "pos_next" / "doctype" / "pos_settings" / "pos_settings.json"
 
 FIELD = "snap_tax_exempt_mode_of_payment"
+DELETE_FLAG = "allow_delete_offline_invoice"
 
 
 def _function(name):
@@ -59,6 +60,28 @@ class TestBootstrapFields(unittest.TestCase):
 		fieldnames = {field["fieldname"] for field in doctype["fields"]}
 		missing = [name for name in _field_list() if name != "name" and name not in fieldnames]
 		self.assertEqual([], missing)
+
+	def test_get_pos_settings_asks_for_the_delete_offline_flag(self):
+		self.assertIn(DELETE_FLAG, _field_list())
+
+	def test_default_settings_carry_the_delete_offline_flag_off(self):
+		for node in ast.walk(_function("get_default_pos_settings")):
+			if isinstance(node, ast.Return) and isinstance(node.value, ast.Dict):
+				values = {
+					key.value: value
+					for key, value in zip(node.value.keys, node.value.values, strict=True)
+					if isinstance(key, ast.Constant)
+				}
+				self.assertIn(DELETE_FLAG, values)
+				self.assertEqual(0, ast.literal_eval(values[DELETE_FLAG]))
+				return
+		self.fail("get_default_pos_settings does not return a dict literal")
+
+	def test_delete_offline_flag_is_an_unchecked_check(self):
+		doctype = json.loads(POS_SETTINGS_JSON.read_text(encoding="utf-8"))
+		field = {item["fieldname"]: item for item in doctype["fields"]}[DELETE_FLAG]
+		self.assertEqual("Check", field["fieldtype"])
+		self.assertEqual("0", field["default"])
 
 
 if __name__ == "__main__":

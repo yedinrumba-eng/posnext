@@ -86,6 +86,7 @@
 							</div>
 							<div class="flex items-center justify-end sm:justify-start gap-1 sm:gap-2">
 								<button
+									v-if="allowDelete"
 									@click="editInvoice(invoice)"
 									class="p-1.5 sm:p-2 hover:bg-blue-50 rounded-lg transition-colors touch-manipulation"
 									:title="__('Edit Invoice')"
@@ -105,6 +106,7 @@
 									</svg>
 								</button>
 								<button
+									v-if="allowDelete"
 									@click="deleteInvoice(invoice)"
 									class="p-1.5 sm:p-2 hover:bg-red-50 rounded-lg transition-colors touch-manipulation"
 									:title="__('Delete')"
@@ -242,6 +244,10 @@ const props = defineProps({
 		type: String,
 		default: "USD",
 	},
+	allowDelete: {
+		type: Boolean,
+		default: false,
+	},
 })
 
 const emit = defineEmits([
@@ -312,6 +318,7 @@ function viewDetails(invoice) {
 }
 
 function editInvoice(invoice) {
+	if (!props.allowDelete) return
 	emit("edit-invoice", invoice)
 	show.value = false
 }
@@ -321,11 +328,13 @@ function syncAll() {
 }
 
 function deleteInvoice(invoice) {
+	if (!props.allowDelete) return
 	invoiceToDelete.value = invoice
 	showDeleteConfirm.value = true
 }
 
 async function confirmDelete() {
+	if (!props.allowDelete) return
 	if (invoiceToDelete.value) {
 		// Close dialog immediately for better UX
 		showDeleteConfirm.value = false

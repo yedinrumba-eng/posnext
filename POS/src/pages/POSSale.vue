@@ -571,6 +571,7 @@
 				:is-syncing="offlineStore.isSyncing"
 				:currency="shiftStore.profileCurrency"
 				@sync-all="handleSyncAll"
+				:allow-delete="posSettingsStore.allowDeleteOfflineInvoice"
 				@delete-invoice="handleDeleteOfflineInvoice"
 				@edit-invoice="handleEditOfflineInvoice"
 				@refresh="offlineStore.loadPendingInvoices"
@@ -896,7 +897,8 @@
 						<Button
 							v-if="
 								uiStore.errorRetryAction === 'sync' &&
-								uiStore.errorRetryActionData?.failedInvoiceId
+								uiStore.errorRetryActionData?.failedInvoiceId &&
+								posSettingsStore.allowDeleteOfflineInvoice
 							"
 							variant="outline"
 							theme="red"
@@ -1792,6 +1794,7 @@ function handleProceedToPayment() {
 }
 
 async function handleDeleteFailedInvoice() {
+	if (!posSettingsStore.allowDeleteOfflineInvoice) return;
 	if (!uiStore.errorRetryActionData?.failedInvoiceId) return;
 
 	const invoiceId = uiStore.errorRetryActionData.failedInvoiceId;
@@ -2267,6 +2270,7 @@ async function confirmClearCache() {
 }
 
 async function handleEditOfflineInvoice(invoice) {
+	if (!posSettingsStore.allowDeleteOfflineInvoice) return;
 	try {
 		cartStore.clearCart();
 
@@ -2301,6 +2305,7 @@ async function handleEditOfflineInvoice(invoice) {
 }
 
 async function handleDeleteOfflineInvoice(invoiceId) {
+	if (!posSettingsStore.allowDeleteOfflineInvoice) return;
 	try {
 		await offlineStore.deleteOfflineInvoice(invoiceId);
 	} catch (error) {
