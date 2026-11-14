@@ -13,6 +13,8 @@ import frappe
 from frappe import _
 from frappe.utils import flt, nowdate, today, cint, get_datetime
 
+from pos_next.api.price_guard import require_pos_flag
+
 
 @frappe.whitelist()
 def get_customer_balance(customer, company=None):
@@ -237,6 +239,8 @@ def redeem_customer_credit(invoice_name, customer_credit_dict):
 	if not invoice_name:
 		frappe.throw(_("Invoice name is required"))
 
+	require_pos_flag(frappe.db.get_value("Sales Invoice", invoice_name, "pos_profile"), ("allow_credit_sale",))
+
 	if not customer_credit_dict:
 		return []
 
@@ -411,6 +415,12 @@ def cancel_credit_journal_entries(invoice_name):
 	Args:
 		invoice_name: Sales Invoice name
 	"""
+	require_pos_flag(frappe.db.get_value("Sales Invoice", invoice_name, "pos_profile"), ("allow_credit_sale",))
+	return _cancel_credit_journal_entries(invoice_name)
+
+
+def _cancel_credit_journal_entries(invoice_name):
+	"""Cancel the credit redemption journal entries of an invoice (internal, no flag check)."""
 	remark = get_credit_redeem_remark(invoice_name)
 
 	# Find linked journal entries

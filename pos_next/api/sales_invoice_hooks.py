@@ -128,8 +128,8 @@ def before_cancel(doc, method=None):
 		method: Hook method name (unused)
 	"""
 	try:
-		from pos_next.api.credit_sales import cancel_credit_journal_entries
-		cancel_credit_journal_entries(doc.name)
+		from pos_next.api.credit_sales import _cancel_credit_journal_entries
+		_cancel_credit_journal_entries(doc.name)
 	except Exception as e:
 		frappe.log_error(
 			title="Credit Sale JE Cancellation Error",

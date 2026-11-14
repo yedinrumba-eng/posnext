@@ -28,6 +28,8 @@ from frappe.utils import flt, nowdate, get_datetime, cint, get_time
 from datetime import datetime
 from enum import Enum
 
+from pos_next.api.price_guard import require_pos_flag
+
 
 # ==========================================
 # Constants and Configuration
@@ -794,6 +796,11 @@ def add_payment_to_partial_invoice(invoice_name: str, payments) -> Dict:
     # Input validation
     if not invoice_name:
         frappe.throw(_("Invoice name is required"))
+
+    require_pos_flag(
+        frappe.db.get_value("Sales Invoice", invoice_name, "pos_profile"),
+        ("allow_partial_payment", "allow_credit_sale"),
+    )
 
     # Parse payments if string, otherwise use as-is
     if isinstance(payments, str):
