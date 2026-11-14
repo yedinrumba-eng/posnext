@@ -9,6 +9,7 @@ from frappe import _
 from frappe.utils import flt, cint, nowdate, nowtime, get_datetime, cstr
 from erpnext.stock.doctype.batch.batch import get_batch_qty, get_batch_no
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import get_bank_cash_account
+from pos_next.api.pos_doctypes import check_pos_doctype
 
 try:
     from erpnext.accounts.doctype.pricing_rule.pricing_rule import (
@@ -311,6 +312,7 @@ def update_invoice(data):
 
         pos_profile = data.get("pos_profile")
         doctype = data.get("doctype", "Sales Invoice")
+        check_pos_doctype(doctype, pos_profile)
 
         # Ensure the document type is set
         data.setdefault("doctype", doctype)
@@ -517,6 +519,7 @@ def update_invoice(data):
                 invoice_doc.coupon_code = coupon_code
 
         # Save as draft
+        invoice_doc.flags.pos_next_api = True
         invoice_doc.flags.ignore_permissions = True
         frappe.flags.ignore_account_permission = True
         invoice_doc.docstatus = 0
@@ -789,6 +792,7 @@ def submit_invoice(invoice=None, data=None):
 
     pos_profile = invoice.get("pos_profile")
     doctype = invoice.get("doctype", "Sales Invoice")
+    check_pos_doctype(doctype, pos_profile)
 
     # ========================================================================
     # OFFLINE INVOICE DEDUPLICATION
@@ -908,6 +912,7 @@ def submit_invoice(invoice=None, data=None):
             _validate_stock_on_invoice(invoice_doc)
 
         # Save before submit
+        invoice_doc.flags.pos_next_api = True
         invoice_doc.flags.ignore_permissions = True
         frappe.flags.ignore_account_permission = True
         invoice_doc.save()
