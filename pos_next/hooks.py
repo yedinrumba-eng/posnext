@@ -205,10 +205,13 @@ doc_events = {
 		"after_insert": "pos_next.api.customers.auto_assign_loyalty_program"
 	},
 	"Sales Invoice": {
+		"before_validate": "pos_next.api.price_guard.enforce_pos_prices",
+		"before_update_after_submit": "pos_next.api.invoice_row_guard.block_update_after_submit",
 		"validate": [
 			"pos_next.api.sales_invoice_hooks.validate",
 			"pos_next.api.wallet.validate_wallet_payment"
 		],
+		"before_submit": "pos_next.api.price_guard.enforce_full_payment",
 		"before_cancel": "pos_next.api.sales_invoice_hooks.before_cancel",
 		"on_submit": [
 			"pos_next.realtime_events.emit_stock_update_event",
@@ -216,6 +219,24 @@ doc_events = {
 		],
 		"on_cancel": "pos_next.realtime_events.emit_stock_update_event",
 		"after_insert": "pos_next.realtime_events.emit_invoice_created_event"
+	},
+	"Sales Invoice Item": {
+		"before_insert": "pos_next.api.invoice_row_guard.block_standalone_invoice_row",
+		"before_validate": "pos_next.api.invoice_row_guard.block_standalone_invoice_row",
+		"before_update_after_submit": "pos_next.api.invoice_row_guard.block_standalone_invoice_row",
+		"on_trash": "pos_next.api.invoice_row_guard.block_standalone_invoice_row"
+	},
+	"Sales Invoice Payment": {
+		"before_insert": "pos_next.api.invoice_row_guard.block_standalone_invoice_row",
+		"before_validate": "pos_next.api.invoice_row_guard.block_standalone_invoice_row",
+		"before_update_after_submit": "pos_next.api.invoice_row_guard.block_standalone_invoice_row",
+		"on_trash": "pos_next.api.invoice_row_guard.block_standalone_invoice_row"
+	},
+	"Sales Taxes and Charges": {
+		"before_insert": "pos_next.api.invoice_row_guard.block_standalone_invoice_row",
+		"before_validate": "pos_next.api.invoice_row_guard.block_standalone_invoice_row",
+		"before_update_after_submit": "pos_next.api.invoice_row_guard.block_standalone_invoice_row",
+		"on_trash": "pos_next.api.invoice_row_guard.block_standalone_invoice_row"
 	},
 	"POS Profile": {
 		"on_update": "pos_next.realtime_events.emit_pos_profile_updated_event"
