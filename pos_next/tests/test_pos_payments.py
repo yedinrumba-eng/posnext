@@ -73,6 +73,7 @@ class TestPosPayments(unittest.TestCase):
 		patches = [
 			mock.patch.object(module, "_", new=lambda text: text),
 			mock.patch.object(module, "flt", side_effect=_flt),
+			mock.patch.object(module, "cstr", new=lambda value: "" if value is None else str(value)),
 		]
 		for patch in patches:
 			patch.start()
@@ -166,6 +167,56 @@ class TestPosPayments(unittest.TestCase):
 		totals = min(node.lineno for node in calls["calculate_taxes_and_totals"])
 		self.assertLess(missing[0].lineno, restore)
 		self.assertLess(restore, totals)
+
+	def test_requested_payments_rejects_non_finite(self):
+		for value in (float("nan"), float("inf"), float("-inf"), float("1e999"), "NaN"):
+			with self.subTest(value=value):
+				with self.assertRaises(RuntimeError) as ctx:
+					module.requested_payments([Row(mode_of_payment="Cash", amount=value)])
+				self.assertIn("Payment amounts must be finite numbers", str(ctx.exception))
+
+	def test_requested_payments_casts_mode_to_text(self):
+		result = module.requested_payments([Row(mode_of_payment=123, amount=1)])
+		self.assertEqual([{"mode_of_payment": "123", "amount": 1.0}], result)
+		with self.assertRaises(RuntimeError) as ctx:
+			module.restore_requested_payments(FakeDoc(), result)
+		self.assertIn("Mode of payment 123 is not set up in POS Profile P1", str(ctx.exception))
+		listed = module.requested_payments([Row(mode_of_payment=["Cash"], amount=1)])
+		with self.assertRaises(RuntimeError) as ctx:
+			module.restore_requested_payments(FakeDoc(), listed)
+		self.assertIn("Mode of payment ['Cash'] is not set up", str(ctx.exception))
+
+	def test_update_invoice_return_check_uses_cint(self):
+		path = pathlib.Path(__file__).resolve().parents[1] / "api" / "invoices.py"
+		tree = ast.parse(path.read_text(encoding="utf-8"))
+		func = next(
+			node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "update_invoice"
+		)
+
+		def is_return_get(node):
+			return (
+				isinstance(node, ast.Call)
+				and isinstance(node.func, ast.Attribute)
+				and node.func.attr == "get"
+				and isinstance(node.func.value, ast.Name)
+				and node.func.value.id == "invoice_doc"
+				and len(node.args) == 1
+				and isinstance(node.args[0], ast.Constant)
+				and node.args[0].value == "is_return"
+			)
+
+		bare = [node for node in ast.walk(func) if isinstance(node, ast.If) and is_return_get(node.test)]
+		self.assertEqual([], bare)
+		wrapped = [
+			node
+			for node in ast.walk(func)
+			if isinstance(node, ast.Call)
+			and isinstance(node.func, ast.Name)
+			and node.func.id == "cint"
+			and len(node.args) == 1
+			and is_return_get(node.args[0])
+		]
+		self.assertEqual(2, len(wrapped))
 
 
 if __name__ == "__main__":

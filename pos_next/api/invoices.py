@@ -497,7 +497,7 @@ def update_invoice(data):
                     pass  # Will be handled during save
 
         # For return invoices, ensure payments are negative
-        if invoice_doc.get("is_return"):
+        if cint(invoice_doc.get("is_return")):
             # Return handling is primarily for Sales Invoice
             if doctype == "Sales Invoice" and invoice_doc.get("payments"):
                 for payment in invoice_doc.payments:
