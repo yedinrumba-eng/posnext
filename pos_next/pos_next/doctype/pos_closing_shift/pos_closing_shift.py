@@ -725,4 +725,6 @@ def submit_printed_invoices(pos_opening_shift, doctype):
     )
     for invoice in invoices_list:
         invoice_doc = frappe.get_doc(doctype, invoice.name)
+        # korvex fork: printed drafts of the shift are submitted by whoever closes it (spec 041).
+        invoice_doc.flags.from_closing_shift = True
         invoice_doc.submit()

@@ -11,6 +11,7 @@ from erpnext.stock.doctype.batch.batch import get_batch_qty, get_batch_no
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import get_bank_cash_account
 from pos_next.api.pos_doctypes import check_pos_doctype
 from pos_next.api.pos_payments import requested_payments, restore_requested_payments
+from pos_next.overrides.sales_invoice import resolve_offline_shift
 
 try:
     from erpnext.accounts.doctype.pricing_rule.pricing_rule import (
@@ -835,6 +836,11 @@ def submit_invoice(invoice=None, data=None):
     invoice_submitted = False
 
     try:
+        # korvex fork: a late offline sale joins the cashier's open shift (spec 041).
+        if offline_id and doctype == "Sales Invoice":
+            invoice["posa_pos_opening_shift"] = resolve_offline_shift(
+                invoice.get("posa_pos_opening_shift"), pos_profile
+            )
         invoice_name = invoice.get("name")
 
         # Get or create invoice

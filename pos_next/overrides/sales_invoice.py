@@ -11,6 +11,9 @@ import frappe
 from frappe.utils import cint, flt
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice
 from erpnext.accounts.utils import get_account_currency
+from pos_next.price_rules import PRICE_OVERRIDE_ROLES
+
+SHIFT_MISSING_MESSAGE = "POS sales and returns need an open POS Opening Shift"
 
 
 def subtract_change_once(payments, account, change: float, precision: int) -> None:
@@ -27,6 +30,83 @@ def subtract_change_once(payments, account, change: float, precision: int) -> No
 		matching[-1].base_amount = flt(matching[-1].base_amount - remaining, precision)
 
 
+def sale_shift_violation(
+	shift: dict | None,
+	session_user: str,
+	roles: set,
+	pos_profile: str,
+	company: str,
+	in_close: bool,
+	can_read_shift: bool,
+) -> str | None:
+	"""Return why a POS sale cannot use this shift, or None when it can."""
+	if "System Manager" in roles:
+		return None
+	if not shift:
+		return SHIFT_MISSING_MESSAGE
+	name = shift["name"]
+	if cint(shift["docstatus"]) != 1 or shift["status"] != "Open":
+		return f"POS Opening Shift {name} is not open. Open a shift and try again"
+	if shift["pos_profile"] != pos_profile or shift["company"] != company:
+		return f"POS Opening Shift {name} belongs to another POS Profile or Company"
+	if shift["user"] != session_user and not (in_close and roles & PRICE_OVERRIDE_ROLES and can_read_shift):
+		return f"POS Opening Shift {name} belongs to another user"
+	return None
+
+
+def offline_sale_shift(
+	name: str | None,
+	shift: dict | None,
+	session_user: str,
+	pos_profile: str,
+	open_shift: str | None,
+) -> str | None:
+	"""Return the open shift a late offline sale joins, or its own shift when it cannot move."""
+	if (
+		shift
+		and shift["status"] == "Closed"
+		and shift["user"] == session_user
+		and shift["pos_profile"] == pos_profile
+		and open_shift is not None
+	):
+		return open_shift
+	return name
+
+
+def _shift_row(name: str | None) -> dict | None:
+	"""Read the POS Opening Shift fields the sale rule needs."""
+	if not name:
+		return None
+	return frappe.db.get_value(
+		"POS Opening Shift",
+		name,
+		["name", "user", "status", "docstatus", "pos_profile", "company"],
+		as_dict=True,
+	)
+
+
+def resolve_offline_shift(name: str | None, pos_profile: str) -> str | None:
+	"""Move a sale whose shift is closed to the open shift of the same cashier, if there is one."""
+	shift = _shift_row(name)
+	open_shift = None
+	if shift and shift["status"] == "Closed":
+		found = frappe.get_list(
+			"POS Opening Shift",
+			filters={
+				"user": frappe.session.user,
+				"pos_profile": pos_profile,
+				"company": shift["company"],
+				"docstatus": 1,
+				"status": "Open",
+			},
+			pluck="name",
+			order_by="period_start_date desc",
+			limit_page_length=1,
+		)
+		open_shift = found[0] if found else None
+	return offline_sale_shift(name, shift, frappe.session.user, pos_profile, open_shift)
+
+
 class CustomSalesInvoice(SalesInvoice):
 	"""
 	Custom Sales Invoice class that handles wallet payments correctly.
@@ -35,6 +115,32 @@ class CustomSalesInvoice(SalesInvoice):
 	party information in the GL entry. This override adds party_type and party
 	for wallet payment methods marked with is_wallet_payment.
 	"""
+
+	def validate(self):
+		self.enforce_pos_shift()
+		super().validate()
+
+	def enforce_pos_shift(self):
+		"""Reject a POS sale or return without an open shift of the user who rings it."""
+		if not cint(self.is_pos):
+			return
+		name = self.get("posa_pos_opening_shift")
+		shift = _shift_row(name)
+		user = frappe.session.user
+		can_read = bool(
+			shift and shift["user"] != user and frappe.has_permission("POS Opening Shift", "read", doc=name)
+		)
+		error = sale_shift_violation(
+			shift,
+			user,
+			set(frappe.get_roles()),
+			self.pos_profile,
+			self.company,
+			bool(self.flags.get("from_closing_shift")),
+			can_read,
+		)
+		if error:
+			frappe.throw(frappe._(error), title=frappe._("Shift check"))
 
 	def make_pos_gl_entries(self, gl_entries):
 		"""
