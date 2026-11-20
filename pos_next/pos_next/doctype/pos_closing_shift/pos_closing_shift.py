@@ -184,6 +184,8 @@ class POSClosingShift(Document):
         opening_entry.pos_closing_shift = self.name
         opening_entry.set_status()
         self.delete_draft_invoices()
+        # korvex fork: the only writer of the shift status (spec 040).
+        opening_entry.flags.from_closing_shift = True
         opening_entry.save()
         # link invoices with this closing shift so ERPNext can block edits
         self._set_closing_entry_invoices()
@@ -194,6 +196,8 @@ class POSClosingShift(Document):
             if opening_entry.pos_closing_shift == self.name:
                 opening_entry.pos_closing_shift = ""
                 opening_entry.set_status()
+                # korvex fork: the only writer of the shift status (spec 040).
+                opening_entry.flags.from_closing_shift = True
                 opening_entry.save()
         # remove links from invoices so they can be cancelled
         self._clear_closing_entry_invoices()

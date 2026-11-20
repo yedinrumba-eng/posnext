@@ -48,6 +48,8 @@ class FakeClosing:
 	def __init__(self):
 		self.pos_opening_shift = "OS-1"
 		self.user = "b"
+		self.company = "OTHER"
+		self.pos_profile = "OTHER"
 		self.grand_total = 0
 		self.payment_reconciliation = [Row(mode_of_payment="Cash", expected_amount=40, closing_amount=40)]
 
@@ -90,6 +92,10 @@ class CountedAmountsCase(unittest.TestCase):
 		self.assertEqual(closing.counted_amounts(rows, ["Cash", "Card"]), {"Cash": 40.0, "Card": 5.6})
 		self.assertEqual(closing.counted_amounts([], ["Cash", "Card"]), {})
 
+	def test_counted_amounts_allows_zero(self):
+		rows = [Row(mode_of_payment="Cash", closing_amount=0)]
+		self.assertEqual(closing.counted_amounts(rows, ["Cash"]), {"Cash": 0.0})
+
 	def test_counted_amounts_rejects_unknown_mode(self):
 		rows = [Row(mode_of_payment="Wire", closing_amount=1)]
 		with self.assertRaisesRegex(RuntimeError, "Mode of payment Wire is not part of this shift"):
@@ -108,10 +114,27 @@ class CountedAmountsCase(unittest.TestCase):
 
 
 class ServerTotalsCase(unittest.TestCase):
-	def test_server_totals_ignore_client_values(self):
+	def _apply(self, built) -> FakeClosing:
 		opening = mock.MagicMock()
 		opening.user = "a"
 		opening.as_dict.return_value = {}
+		fake_frappe = mock.MagicMock()
+		fake_frappe.get_doc.return_value = opening
+		fake_frappe.session.user = "a"
+		fake_frappe.get_roles.return_value = ["Cajero"]
+		fake_frappe.has_permission.return_value = False
+		fake_frappe.throw.side_effect = _throw
+		fake = FakeClosing()
+		with (
+			mock.patch.object(closing, "frappe", new=fake_frappe),
+			mock.patch.object(closing, "flt", new=_flt),
+			mock.patch.object(closing, "_", new=lambda text: text),
+			mock.patch.object(closing, "_build_closing_shift", return_value=built),
+		):
+			closing.POSClosingShift._apply_server_totals(fake)
+		return fake
+
+	def test_server_totals_ignore_client_values(self):
 		transaction = Row(
 			sales_invoice="SINV-1",
 			posting_date="2026-11-20",
@@ -133,20 +156,7 @@ class ServerTotalsCase(unittest.TestCase):
 			taxes=[],
 			pos_payments=[],
 		)
-		fake_frappe = mock.MagicMock()
-		fake_frappe.get_doc.return_value = opening
-		fake_frappe.session.user = "a"
-		fake_frappe.get_roles.return_value = ["Cajero"]
-		fake_frappe.has_permission.return_value = False
-		fake_frappe.throw.side_effect = _throw
-		fake = FakeClosing()
-		with (
-			mock.patch.object(closing, "frappe", new=fake_frappe),
-			mock.patch.object(closing, "flt", new=_flt),
-			mock.patch.object(closing, "_", new=lambda text: text),
-			mock.patch.object(closing, "_build_closing_shift", return_value=built),
-		):
-			closing.POSClosingShift._apply_server_totals(fake)
+		fake = self._apply(built)
 		self.assertEqual(len(fake.payment_reconciliation), 1)
 		cash = fake.payment_reconciliation[0]
 		self.assertEqual(cash["mode_of_payment"], "Cash")
@@ -154,9 +164,32 @@ class ServerTotalsCase(unittest.TestCase):
 		self.assertAlmostEqual(cash["opening_amount"], 50, places=2)
 		self.assertAlmostEqual(cash["closing_amount"], 40, places=2)
 		self.assertEqual(fake.user, "a")
+		self.assertEqual(fake.company, "C1")
+		self.assertEqual(fake.pos_profile, "P1")
 		self.assertAlmostEqual(fake.grand_total, 10.60, places=2)
 		self.assertEqual([t["sales_invoice"] for t in fake.pos_transactions], ["SINV-1"])
 		self.assertNotIn("is_return", fake.pos_transactions[0])
+
+	def test_mode_without_client_row_counts_zero(self):
+		built = Row(
+			user="a",
+			company="C1",
+			pos_profile="P1",
+			grand_total=0,
+			net_total=0,
+			total_quantity=0,
+			payment_reconciliation=[
+				Row(mode_of_payment="Cash", opening_amount=50, expected_amount=60.60),
+				Row(mode_of_payment="Card", opening_amount=0, expected_amount=5.60),
+			],
+			pos_transactions=[],
+			taxes=[],
+			pos_payments=[],
+		)
+		fake = self._apply(built)
+		counted = {row["mode_of_payment"]: row["closing_amount"] for row in fake.payment_reconciliation}
+		self.assertEqual(counted, {"Cash": 40, "Card": 0})
+		self.assertEqual(fake.payment_reconciliation[1]["closing_amount"], 0)
 
 
 if __name__ == "__main__":
