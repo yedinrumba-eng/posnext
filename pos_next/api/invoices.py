@@ -10,6 +10,7 @@ from frappe.utils import flt, cint, nowdate, nowtime, get_datetime, cstr
 from erpnext.stock.doctype.batch.batch import get_batch_qty, get_batch_no
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import get_bank_cash_account
 from pos_next.api.pos_doctypes import check_pos_doctype
+from pos_next.api.pos_payments import requested_payments, restore_requested_payments
 
 try:
     from erpnext.accounts.doctype.pricing_rule.pricing_rule import (
@@ -462,7 +463,18 @@ def update_invoice(data):
         invoice_doc.disable_rounded_total = disable_rounded
 
         # Populate missing fields (company, currency, accounts, etc.)
+        # set_missing_values() rebuilds payments from the POS Profile with amount 0; keep the cashier's (spec 029).
+        requested = None
+        if (
+            doctype == "Sales Invoice"
+            and invoice_doc.get("pos_profile")
+            and not cint(invoice_doc.get("is_return"))
+        ):
+            requested = requested_payments(invoice_doc.get("payments"))
+            invoice_doc.set("payments", [])
         invoice_doc.set_missing_values()
+        if requested is not None:
+            restore_requested_payments(invoice_doc, requested)
 
         # Calculate totals and apply discounts (with rounding disabled)
         invoice_doc.calculate_taxes_and_totals()
