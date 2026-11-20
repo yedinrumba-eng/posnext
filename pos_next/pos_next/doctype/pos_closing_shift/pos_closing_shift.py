@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import json
+import math
 from collections import defaultdict
 
 import frappe
@@ -13,6 +14,7 @@ from frappe.model.document import Document
 from frappe.utils import flt
 
 from pos_next.overrides.sales_invoice import subtract_change_once
+from pos_next.price_rules import PRICE_OVERRIDE_ROLES
 
 
 def get_base_value(doc, fieldname, base_fieldname=None, conversion_rate=None):
@@ -40,8 +42,43 @@ def get_base_value(doc, fieldname, base_fieldname=None, conversion_rate=None):
     return flt(value) * flt(conversion_rate or 1)
 
 
+def can_close_shift(session_user: str, shift_user: str, roles: set, can_read_shift: bool) -> bool:
+    """Return True if the session user may close this shift: its cashier, or an owner who can read it."""
+
+    if session_user == shift_user:
+        return True
+    return bool(roles & PRICE_OVERRIDE_ROLES) and bool(can_read_shift)
+
+
+def counted_amounts(rows, modes: list) -> dict:
+    """Return {mode: counted amount} from the client rows, rejecting modes and numbers the shift cannot have."""
+
+    counted = {}
+    for row in rows:
+        mode = row.get("mode_of_payment")
+        amount = flt(row.get("closing_amount"))
+        if mode not in modes:
+            frappe.throw(
+                _("Mode of payment {0} is not part of this shift").format(mode),
+                title=_("Closing check"),
+            )
+        if mode in counted:
+            frappe.throw(
+                _("Mode of payment {0} is counted twice").format(mode),
+                title=_("Closing check"),
+            )
+        if not math.isfinite(amount) or amount < 0:
+            frappe.throw(
+                _("Counted amount for {0} must be a finite number of zero or more").format(mode),
+                title=_("Closing check"),
+            )
+        counted[mode] = amount
+    return counted
+
+
 class POSClosingShift(Document):
     def validate(self):
+        self._apply_server_totals()
         user = frappe.get_all(
             "POS Closing Shift",
             filters={
@@ -68,6 +105,72 @@ class POSClosingShift(Document):
                 title=_("Invalid Opening Entry"),
             )
         self.update_payment_reconciliation()
+
+    def _apply_server_totals(self):
+        """Rebuild everything from the shift invoices; keep only what the cashier counted."""
+
+        opening = frappe.get_doc("POS Opening Shift", self.pos_opening_shift)
+        if not can_close_shift(
+            frappe.session.user,
+            opening.user,
+            set(frappe.get_roles()),
+            bool(frappe.has_permission("POS Opening Shift", "read", doc=opening)),
+        ):
+            frappe.throw(_("You cannot close the shift of another user"), frappe.PermissionError)
+
+        built = _build_closing_shift(opening.as_dict())
+        modes = [row["mode_of_payment"] for row in built["payment_reconciliation"]]
+        counted = counted_amounts(self.get("payment_reconciliation") or [], modes)
+
+        for fieldname in (
+            "period_start_date",
+            "period_end_date",
+            "pos_profile",
+            "user",
+            "company",
+            "grand_total",
+            "net_total",
+            "total_quantity",
+        ):
+            self.set(fieldname, built.get(fieldname))
+
+        def pick(rows, fieldnames):
+            return [{name: row.get(name) for name in fieldnames} for row in rows or []]
+
+        self.set(
+            "payment_reconciliation",
+            [
+                {
+                    "mode_of_payment": row["mode_of_payment"],
+                    "opening_amount": row.get("opening_amount"),
+                    "expected_amount": row.get("expected_amount"),
+                    "closing_amount": counted.get(row["mode_of_payment"], 0),
+                }
+                for row in built["payment_reconciliation"]
+            ],
+        )
+        self.set(
+            "pos_transactions",
+            pick(
+                built.get("pos_transactions"),
+                (
+                    "sales_invoice",
+                    "posting_date",
+                    "grand_total",
+                    "transaction_currency",
+                    "transaction_amount",
+                    "customer",
+                ),
+            ),
+        )
+        self.set("taxes", pick(built.get("taxes"), ("account_head", "rate", "amount")))
+        self.set(
+            "pos_payments",
+            pick(
+                built.get("pos_payments"),
+                ("payment_entry", "mode_of_payment", "paid_amount", "posting_date", "customer"),
+            ),
+        )
 
     def update_payment_reconciliation(self):
         # update the difference values in Payment Reconciliation child table
@@ -495,9 +598,7 @@ def _process_invoice(invoice, invoice_field, company_currency, cash_mode, paymen
     return transaction
 
 
-@frappe.whitelist(methods=["POST"])
-def make_closing_shift_from_opening(opening_shift):
-    opening_shift = json.loads(opening_shift)
+def _build_closing_shift(opening_shift: dict) -> dict:
     doctype = "Sales Invoice"
     invoice_field = "sales_invoice"
 
@@ -585,9 +686,24 @@ def make_closing_shift_from_opening(opening_shift):
 
 
 @frappe.whitelist(methods=["POST"])
+def make_closing_shift_from_opening(opening_shift):
+    opening_shift = json.loads(opening_shift)
+    return _build_closing_shift(opening_shift)
+
+
+@frappe.whitelist(methods=["POST"])
 def submit_closing_shift(closing_shift):
     closing_shift = json.loads(closing_shift)
-    closing_shift_doc = frappe.get_doc(closing_shift)
+    closing_shift_doc = frappe.new_doc("POS Closing Shift")
+    closing_shift_doc.pos_opening_shift = closing_shift.get("pos_opening_shift")
+    for row in closing_shift.get("payment_reconciliation") or []:
+        closing_shift_doc.append(
+            "payment_reconciliation",
+            {
+                "mode_of_payment": row.get("mode_of_payment"),
+                "closing_amount": row.get("closing_amount"),
+            },
+        )
     closing_shift_doc.flags.ignore_permissions = True
     closing_shift_doc.save()
     closing_shift_doc.submit()

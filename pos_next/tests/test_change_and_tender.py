@@ -153,6 +153,10 @@ class ChangeOnceCase(unittest.TestCase):
 		self.assertEqual([p.base_amount for p in payments], [10.6, 0.0, 0.0])
 		self.assertEqual(len(gl), 2)
 
+	def test_dust_row_off_change_account_posts_nothing(self):
+		gl = self.post([_pay("Card", "Card - C1", 1e-15)], 0)
+		self.assertEqual(len(gl), 0)
+
 
 class TenderRulesCase(unittest.TestCase):
 	def test_non_cash_over_total_is_rejected(self):

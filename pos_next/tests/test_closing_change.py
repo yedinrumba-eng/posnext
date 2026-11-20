@@ -119,8 +119,13 @@ class TestClosingChange(unittest.TestCase):
 			payments = [_pay("Card", "Card - C1", 10.60)]
 			payments += [_pay("Cash", "Cash - C1", amount) for amount in cash_rows]
 			result = self._close(_invoice(payments, change))
+			self.assertEqual([p.base_amount for p in payments], [10.6, 0.0, 0.0])
 			self.assertEqual(result["Cash"], 50.0)
 			self.assertEqual(result["Card"], 10.6)
+
+	def test_closing_passes_payment_precision(self):
+		self._close(_invoice([_pay("Cash", "Cash - C1", 20)], 9.40))
+		closing.frappe.get_precision.assert_called_once_with("Sales Invoice Payment", "base_amount", currency="USD")
 
 
 if __name__ == "__main__":
