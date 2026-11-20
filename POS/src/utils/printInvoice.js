@@ -4,6 +4,22 @@ import { logger } from "@/utils/logger"
 const log = logger.create('PrintInvoice')
 
 /**
+ * Resolve which print format to use. An explicit format wins, then the POS
+ * Profile format, then the default. A value counts only if it is a non-blank string.
+ * @param {string|null|undefined} explicitFormat - Format requested by the caller
+ * @param {string|null|undefined} profilePrintFormat - Format set on the invoice POS Profile
+ * @returns {string} The print format name
+ */
+export function resolvePrintFormat(explicitFormat, profilePrintFormat) {
+	for (const value of [explicitFormat, profilePrintFormat]) {
+		if (typeof value === "string" && value.trim() !== "") {
+			return value
+		}
+	}
+	return "POS Next Receipt"
+}
+
+/**
  * Print invoice using Frappe's print format system
  * @param {Object} invoiceData - The invoice document data
  * @param {string} printFormat - The print format name (optional)
@@ -21,7 +37,7 @@ export async function printInvoice(
 		}
 
 		const doctype = invoiceData.doctype || "Sales Invoice"
-		const format = printFormat || "POS Next Receipt"
+		const format = resolvePrintFormat(printFormat, null)
 
 		// Build PDF print URL
 		const params = new URLSearchParams({
@@ -487,6 +503,7 @@ export async function printInvoiceByName(
 	printFormat = null,
 	letterhead = null,
 ) {
+	let profilePrintFormat = null
 	try {
 		// Fetch the invoice document using proper POS API endpoint
 		const invoiceDoc = await call("pos_next.api.invoices.get_invoice", {
@@ -506,7 +523,7 @@ export async function printInvoiceByName(
 				})
 
 				if (posProfileDoc) {
-					printFormat = posProfileDoc.print_format
+					profilePrintFormat = posProfileDoc.print_format
 					letterhead = letterhead || posProfileDoc.letter_head
 				}
 			} catch (error) {
@@ -516,7 +533,11 @@ export async function printInvoiceByName(
 		}
 
 		// Print the invoice
-		return await printInvoice(invoiceDoc, printFormat, letterhead)
+		return await printInvoice(
+			invoiceDoc,
+			resolvePrintFormat(printFormat, profilePrintFormat),
+			letterhead,
+		)
 	} catch (error) {
 		log.error("Error fetching invoice for print:", error)
 		throw error
