@@ -48,6 +48,8 @@ class FakeShift:
 		self.company = "C1"
 		self.pos_profile = "P1"
 		self.user = "u1"
+		self.pos_closing_shift = ""
+		self.is_new = mock.MagicMock(return_value=False)
 		self.validate_pos_profile_and_cashier = mock.MagicMock()
 		self.set_status = mock.MagicMock()
 
@@ -95,6 +97,19 @@ class LockedFieldsCase(unittest.TestCase):
 		after = {"status": "Open", "pos_closing_shift": "", "company": "B"}
 		self.assertEqual(opening.changed_locked_fields(before, after), [])
 
+	def test_zero_link_counts_as_change(self):
+		for zero in (0, 0.0):
+			changed = opening.changed_locked_fields({"pos_closing_shift": None}, {"pos_closing_shift": zero})
+			self.assertEqual(changed, ["pos_closing_shift"])
+
+	def test_false_link_counts_as_change(self):
+		changed = opening.changed_locked_fields({"pos_closing_shift": None}, {"pos_closing_shift": False})
+		self.assertEqual(changed, ["pos_closing_shift"])
+
+	def test_text_zero_link_counts_as_change(self):
+		changed = opening.changed_locked_fields({"pos_closing_shift": None}, {"pos_closing_shift": "0"})
+		self.assertEqual(changed, ["pos_closing_shift"])
+
 	def test_hand_change_after_submit_is_rejected(self):
 		before = _snapshot({"status": "Open", "pos_closing_shift": ""})
 		fake = self._fake({}, before, {"status": "Closed", "pos_closing_shift": "x"})
@@ -108,6 +123,12 @@ class LockedFieldsCase(unittest.TestCase):
 
 	def test_missing_snapshot_fails_closed(self):
 		fake = self._fake({}, None, {"status": "Open", "pos_closing_shift": ""})
+		with self.assertRaisesRegex(RuntimeError, "change only through a POS Closing Shift"):
+			opening.POSOpeningShift.before_update_after_submit(fake)
+
+
+	def test_missing_snapshot_fails_closed_without_changes(self):
+		fake = self._fake({}, None, {})
 		with self.assertRaisesRegex(RuntimeError, "change only through a POS Closing Shift"):
 			opening.POSOpeningShift.before_update_after_submit(fake)
 
@@ -134,6 +155,17 @@ class OpeningCleanCase(unittest.TestCase):
 		)
 		opening.POSOpeningShift.validate(clean)
 		clean.set_status.assert_called_once_with()
+
+	def test_new_shift_drops_client_closing_link(self):
+		fresh = FakeShift()
+		fresh.pos_closing_shift = "x"
+		fresh.is_new.return_value = True
+		opening.POSOpeningShift.validate(fresh)
+		self.assertEqual(fresh.pos_closing_shift, "")
+		saved = FakeShift()
+		saved.pos_closing_shift = "x"
+		opening.POSOpeningShift.validate(saved)
+		self.assertEqual(saved.pos_closing_shift, "x")
 
 	def test_shift_user_must_read_the_profile(self):
 		fake = FakeShift()

@@ -13,9 +13,14 @@ LOCKED_FIELDS = ("status", "pos_closing_shift")
 LOCKED_FIELDS_MESSAGE = "Shift status and its closing link change only through a POS Closing Shift"
 
 
+def _blank_if_none(value):
+    """Return "" for None and the value untouched otherwise, so 0 and False stay changes."""
+    return "" if value is None else value
+
+
 def changed_locked_fields(before: dict, after: dict) -> list:
     """Return the locked fields whose value differs between the two snapshots."""
-    return [f for f in LOCKED_FIELDS if (before.get(f) or "") != (after.get(f) or "")]
+    return [f for f in LOCKED_FIELDS if _blank_if_none(before.get(f)) != _blank_if_none(after.get(f))]
 
 
 def duplicate_modes(rows) -> list:
@@ -34,6 +39,8 @@ def duplicate_modes(rows) -> list:
 
 class POSOpeningShift(Document):
     def validate(self):
+        if self.is_new():
+            self.pos_closing_shift = ""
         self.validate_pos_profile_and_cashier()
         dupes = duplicate_modes(self.get("balance_details") or [])
         if dupes:
@@ -49,7 +56,9 @@ class POSOpeningShift(Document):
         if self.flags.get("from_closing_shift"):
             return
         before = self.get_doc_before_save()
-        changed = changed_locked_fields(before.as_dict() if before else {}, self.as_dict())
+        if before is None:
+            frappe.throw(_(LOCKED_FIELDS_MESSAGE), frappe.PermissionError)
+        changed = changed_locked_fields(before.as_dict(), self.as_dict())
         if changed:
             frappe.throw(_(LOCKED_FIELDS_MESSAGE), frappe.PermissionError)
 
