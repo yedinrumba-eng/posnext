@@ -77,6 +77,7 @@ class TestClosingChange(unittest.TestCase):
 	def setUp(self):
 		frappe_mock = mock.MagicMock()
 		frappe_mock._dict = Row
+		frappe_mock.get_precision.return_value = 2
 		patches = [
 			mock.patch.object(closing, "flt", new=_flt),
 			mock.patch.object(override, "flt", new=_flt),
@@ -112,6 +113,14 @@ class TestClosingChange(unittest.TestCase):
 			change_account="Other - C1",
 		)
 		self.assertAlmostEqual(75.00, self._close(invoice)["Cash"], places=2)
+
+	def test_closing_change_rounding_leaves_no_dust(self):
+		for cash_rows, change in (((0.60, 20), 20.60), ((0.10, 0.20), 0.30)):
+			payments = [_pay("Card", "Card - C1", 10.60)]
+			payments += [_pay("Cash", "Cash - C1", amount) for amount in cash_rows]
+			result = self._close(_invoice(payments, change))
+			self.assertEqual(result["Cash"], 50.0)
+			self.assertEqual(result["Card"], 10.6)
 
 
 if __name__ == "__main__":

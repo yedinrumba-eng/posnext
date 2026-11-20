@@ -77,6 +77,7 @@ class FakeInvoice:
 		self.account_for_change_amount = "Cash - C1"
 		self.change_amount = change_amount
 		self.payments = payments
+		self.precision = lambda *args: 2
 		self.get_gl_dict = lambda args, *a, **kw: dict(args)
 		self.get_party_and_party_type_for_pos_gl_entry = lambda mode, account: ("", "")
 
@@ -127,9 +128,30 @@ class ChangeOnceCase(unittest.TestCase):
 
 	def test_change_beyond_cash_rows_comes_off_the_last_one(self):
 		payments = [_pay("Card", "Card - C1", 30), _pay("Cash", "Cash - C1", 5)]
-		override.subtract_change_once(payments, "Cash - C1", 24.40)
+		override.subtract_change_once(payments, "Cash - C1", 24.40, 2)
 		self.assertAlmostEqual(30 + 5 - sum(row.base_amount for row in payments), 24.40, places=2)
 		self.assertAlmostEqual(payments[0].base_amount, 30, places=2)
+
+
+	def test_change_rounding_leaves_no_dust(self):
+		payments = [
+			_pay("Card", "Card - C1", 10.60),
+			_pay("Cash", "Cash - C1", 0.60),
+			_pay("Cash", "Cash - C1", 20),
+		]
+		gl = self.post(payments, 20.60)
+		self.assertEqual([p.base_amount for p in payments], [10.6, 0.0, 0.0])
+		self.assertEqual(len(gl), 2)
+
+	def test_change_rounding_small_coins(self):
+		payments = [
+			_pay("Card", "Card - C1", 10.60),
+			_pay("Cash", "Cash - C1", 0.10),
+			_pay("Cash", "Cash - C1", 0.20),
+		]
+		gl = self.post(payments, 0.30)
+		self.assertEqual([p.base_amount for p in payments], [10.6, 0.0, 0.0])
+		self.assertEqual(len(gl), 2)
 
 
 class TenderRulesCase(unittest.TestCase):

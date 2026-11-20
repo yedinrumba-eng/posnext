@@ -13,18 +13,18 @@ from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice
 from erpnext.accounts.utils import get_account_currency
 
 
-def subtract_change_once(payments, account, change: float) -> None:
-	"""Take the change off the rows paid into `account`, last row first, exactly once."""
+def subtract_change_once(payments, account, change: float, precision: int) -> None:
+	"""Take the change off the rows paid into `account`, last row first, exactly once, rounded to precision."""
 	matching = [row for row in payments if row.account == account]
 	if change <= 0 or not matching:
 		return
-	remaining = change
+	remaining = flt(change, precision)
 	for row in reversed(matching):
 		take = min(remaining, max(flt(row.base_amount), 0.0))
-		row.base_amount -= take
-		remaining -= take
+		row.base_amount = flt(flt(row.base_amount) - take, precision)
+		remaining = flt(remaining - take, precision)
 	if remaining > 0:
-		matching[-1].base_amount -= remaining
+		matching[-1].base_amount = flt(matching[-1].base_amount - remaining, precision)
 
 
 class CustomSalesInvoice(SalesInvoice):
@@ -55,13 +55,14 @@ class CustomSalesInvoice(SalesInvoice):
 			)
 
 			# korvex fork fix: one row per tap; the change leaves the drawer once (spec 034).
+			precision = self.precision("base_amount", "payments")
 			if skip_change_gl_entries:
 				subtract_change_once(
-					self.payments, self.account_for_change_amount, flt(self.change_amount)
+					self.payments, self.account_for_change_amount, flt(self.change_amount), precision
 				)
 
 			for payment_mode in self.payments:
-				if payment_mode.base_amount:
+				if flt(payment_mode.base_amount, precision):
 					# POS, make payment entries
 					# Credit entry to debit_to (customer receivable)
 					gl_entries.append(

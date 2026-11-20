@@ -482,7 +482,12 @@ def _process_invoice(invoice, invoice_field, company_currency, cash_mode, paymen
     # Process payments
     # korvex fork fix: same rule as the GL, the change leaves the drawer once (spec 037).
     change = 0 if is_return else get_base_value(invoice, "change_amount", "base_change_amount", conversion_rate)
-    subtract_change_once(invoice.payments, invoice.get("account_for_change_amount"), change)
+    subtract_change_once(
+        invoice.payments,
+        invoice.get("account_for_change_amount"),
+        change,
+        frappe.get_precision("Sales Invoice Payment", "base_amount", currency=company_currency),
+    )
     for p in invoice.payments:
         amount = get_base_value(p, "amount", "base_amount", conversion_rate)
         _aggregate_payment(payments, p.mode_of_payment, amount)
