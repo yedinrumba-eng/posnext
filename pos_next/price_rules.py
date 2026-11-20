@@ -8,6 +8,7 @@ The server decides the price: the client's rate is ignored and only an allowed d
 percentage survives. See pos_next.api.price_guard for the hook that applies these rules.
 """
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
@@ -15,6 +16,8 @@ from dataclasses import dataclass
 PRICE_OVERRIDE_ROLES = frozenset({"Dueño", "System Manager"})
 
 _EPSILON = 1e-6
+
+NON_FINITE_PAYMENT_MESSAGE = "Payment amounts must be finite numbers"
 
 
 def expected_unit_price(
@@ -137,6 +140,8 @@ def payment_violation(
 	payments: Sequence[float], due: float, allow_partial: bool, allow_credit: bool
 ) -> str | None:
 	"""Why the payment rows do not cover the invoice, or None. Either flag allows a short payment."""
+	if not all(math.isfinite(amount) for amount in [*payments, due]):
+		return NON_FINITE_PAYMENT_MESSAGE
 	if any(amount < 0 for amount in payments):
 		return "Payment amounts cannot be negative on a sale"
 	if allow_partial or allow_credit:
@@ -144,6 +149,22 @@ def payment_violation(
 	paid = sum(payments)
 	if paid < due - 0.005:
 		return f"Payment {paid:.2f} is less than the invoice total {due:.2f}"
+	return None
+
+
+def tender_violation(
+	cash: Sequence[float], non_cash: Sequence[float], due: float, change: float
+) -> str | None:
+	"""Why this split of cash and non-cash tender is not allowed, or None. First failure wins."""
+	if not all(math.isfinite(value) for value in [*cash, *non_cash, due, change]):
+		return NON_FINITE_PAYMENT_MESSAGE
+	if sum(non_cash) > due + 0.005:
+		return (
+			f"Card and other non-cash payments {sum(non_cash):.2f} are more than the invoice total "
+			f"{due:.2f}"
+		)
+	if change > sum(cash) + 0.005:
+		return f"Change {change:.2f} is more than the cash received {sum(cash):.2f}"
 	return None
 
 

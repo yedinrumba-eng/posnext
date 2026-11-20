@@ -26,6 +26,7 @@ from pos_next.price_rules import (
 	payment_violation,
 	return_line_violation,
 	return_violation,
+	tender_violation,
 	uom_factor,
 )
 
@@ -117,11 +118,23 @@ def enforce_pos_prices(doc, method=None):
 
 def enforce_full_payment(doc, method=None):
 	"""before_submit hook for Sales Invoice: the payment must cover the total unless credit is allowed."""
-	if doc.doctype != "Sales Invoice" or cint(doc.is_return) or _is_override():
+	if doc.doctype != "Sales Invoice" or cint(doc.is_return):
 		return
 
 	settings = _settings(doc.pos_profile)
 	if _guard_off(settings):
+		return
+
+	due = flt(doc.get("rounded_total")) or flt(doc.grand_total)
+	rows = doc.get("payments") or []
+	types = _mode_of_payment_types(sorted({r.mode_of_payment for r in rows if r.mode_of_payment}))
+	cash = [flt(r.amount) for r in rows if types.get(r.mode_of_payment) == "Cash"]
+	non_cash = [flt(r.amount) for r in rows if types.get(r.mode_of_payment) != "Cash"]
+	error = tender_violation(cash, non_cash, due, flt(doc.get("change_amount")))
+	if error:
+		frappe.throw(error, title=_("Payment check"))
+
+	if _is_override():
 		return
 
 	error = invoice_discount_violation(
@@ -135,7 +148,6 @@ def enforce_full_payment(doc, method=None):
 	if error:
 		frappe.throw(error, title=_("Price check"))
 
-	due = flt(doc.get("rounded_total")) or flt(doc.grand_total)
 	error = payment_violation(
 		[flt(row.amount) for row in doc.get("payments") or []],
 		due,
@@ -470,6 +482,14 @@ def _mode_of_payment_accounts(company, modes):
 		fields=["parent", "default_account"],
 	)
 	return {row.parent: row.default_account for row in rows if row.default_account}
+
+
+def _mode_of_payment_types(modes):
+	"""{mode_of_payment: type} read from the database; the client's row type is never used."""
+	if not modes:
+		return {}
+	rows = frappe.get_all("Mode of Payment", filters={"name": ["in", modes]}, fields=["name", "type"])
+	return {row.name: row.type for row in rows}
 
 
 def _default_tax_template(company):

@@ -13,6 +13,20 @@ from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice
 from erpnext.accounts.utils import get_account_currency
 
 
+def subtract_change_once(payments, account, change: float) -> None:
+	"""Take the change off the rows paid into `account`, last row first, exactly once."""
+	matching = [row for row in payments if row.account == account]
+	if change <= 0 or not matching:
+		return
+	remaining = change
+	for row in reversed(matching):
+		take = min(remaining, max(flt(row.base_amount), 0.0))
+		row.base_amount -= take
+		remaining -= take
+	if remaining > 0:
+		matching[-1].base_amount -= remaining
+
+
 class CustomSalesInvoice(SalesInvoice):
 	"""
 	Custom Sales Invoice class that handles wallet payments correctly.
@@ -40,11 +54,14 @@ class CustomSalesInvoice(SalesInvoice):
 				frappe.db.get_single_value("POS Settings", "post_change_gl_entries")
 			)
 
-			for payment_mode in self.payments:
-				if skip_change_gl_entries and payment_mode.account == self.account_for_change_amount:
-					payment_mode.base_amount -= flt(self.change_amount)
+			# korvex fork fix: one row per tap; the change leaves the drawer once (spec 034).
+			if skip_change_gl_entries:
+				subtract_change_once(
+					self.payments, self.account_for_change_amount, flt(self.change_amount)
+				)
 
-				if payment_mode.amount:
+			for payment_mode in self.payments:
+				if payment_mode.base_amount:
 					# POS, make payment entries
 					# Credit entry to debit_to (customer receivable)
 					gl_entries.append(
