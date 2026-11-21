@@ -255,6 +255,7 @@ class ShiftRowGuardCase(unittest.TestCase):
 			mock.patch.object(self.guard, "frappe", new=fake_frappe),
 			mock.patch.object(self.guard, "_", new=lambda text: text),
 			mock.patch.object(self.guard, "_actor", new=lambda: self.actor),
+			mock.patch.object(self.guard, "canonical_parenttype", create=True, new=lambda doc: doc.get("parenttype") or ""),
 		):
 			patch.start()
 			self.addCleanup(patch.stop)
@@ -288,7 +289,7 @@ class ShiftRowGuardCase(unittest.TestCase):
 		for doctype in self.guard.SHIFT_ROW_DOCTYPES:
 			with self.subTest(doctype=doctype):
 				self.assertEqual(
-					{"before_insert", "before_validate", "before_update_after_submit", "on_trash"},
+					{"before_insert", "before_validate", "before_update_after_submit", "before_submit", "before_cancel", "on_trash"},
 					set(events[doctype]),
 				)
 				for path in events[doctype].values():

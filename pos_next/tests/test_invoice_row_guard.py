@@ -29,6 +29,24 @@ def _throw(message, *args, **kwargs):
 	raise RuntimeError(message)
 
 
+KNOWN_DOCTYPES = (
+	"Sales Invoice",
+	"POS Opening Shift",
+	"POS Closing Shift",
+	"POS Closing Entry",
+	"Sales Taxes and Charges Template",
+)
+
+
+def _fake_get_meta(parenttype):
+	for name in KNOWN_DOCTYPES:
+		if name.casefold() == parenttype.rstrip().casefold():
+			meta = mock.Mock()
+			meta.name = name
+			return meta
+	raise module.frappe.DoesNotExistError(parenttype)
+
+
 def _doc_events():
 	path = pathlib.Path(__file__).resolve().parents[1] / "hooks.py"
 	for node in ast.parse(path.read_text(encoding="utf-8")).body:
@@ -47,6 +65,7 @@ class GuardCase(unittest.TestCase):
 			mock.patch.object(module, "_actor", side_effect=lambda: self.actor),
 			mock.patch.object(module, "_is_override", side_effect=lambda: self.override),
 			mock.patch.object(module, "_", new=lambda text: text),
+			mock.patch.object(module.frappe, "get_meta", side_effect=_fake_get_meta),
 		]
 		for patch in patches:
 			patch.start()
@@ -84,6 +103,42 @@ class TestInvoiceRowGuard(GuardCase):
 		module.block_standalone_invoice_row(other)
 		self.throw.assert_not_called()
 
+	def test_5_odd_parenttype_spelling_is_rejected(self):
+		for parenttype in ("sales invoice", "Sales Invoice ", "SALES invoice"):
+			with self.subTest(parenttype=parenttype):
+				row = Row(doctype="Sales Invoice Payment", parenttype=parenttype, parent="SINV-1")
+				with self.assertRaisesRegex(RuntimeError, "Rows of Sales Invoice SINV-1"):
+					module.block_standalone_invoice_row(row)
+
+	def test_6_unknown_or_empty_parenttype_passes(self):
+		module.block_standalone_invoice_row(
+			Row(doctype="Sales Invoice Payment", parenttype="No Such DocType", parent="X-1")
+		)
+		self.throw.assert_not_called()
+		module.frappe.get_meta.reset_mock()
+		module.block_standalone_invoice_row(Row(doctype="Sales Invoice Payment", parenttype=None, parent="X-1"))
+		self.throw.assert_not_called()
+		module.frappe.get_meta.assert_not_called()
+
+	def test_7_shift_guard_resolves_parenttype(self):
+		guard = importlib.import_module("pos_next.api.shift_row_guard")
+		for patch in (
+			mock.patch.object(guard, "_", new=lambda text: text),
+			mock.patch.object(guard, "_actor", new=lambda: self.actor),
+		):
+			patch.start()
+			self.addCleanup(patch.stop)
+		cases = (
+			("pos closing shift", "Rows of POS Closing Shift CS-1"),
+			("POS Closing Shift ", "Rows of POS Closing Shift CS-1"),
+			("Pos Opening SHIFT", "Rows of POS Opening Shift"),
+		)
+		for parenttype, message in cases:
+			with self.subTest(parenttype=parenttype):
+				row = Row(doctype="POS Closing Shift Detail", parenttype=parenttype, parent="CS-1")
+				with self.assertRaisesRegex(RuntimeError, message):
+					guard.block_standalone_shift_row(row)
+
 	def test_3_a_submitted_invoice_changes_only_with_override(self):
 		doc = Row(doctype="Sales Invoice", name="SINV-1")
 		with self.assertRaises(RuntimeError) as ctx:
@@ -114,7 +169,14 @@ class TestInvoiceRowGuard(GuardCase):
 		for doctype in module.INVOICE_ROW_DOCTYPES:
 			with self.subTest(doctype=doctype):
 				self.assertEqual(
-					{"before_insert", "before_validate", "before_update_after_submit", "on_trash"},
+					{
+						"before_insert",
+						"before_validate",
+						"before_update_after_submit",
+						"before_submit",
+						"before_cancel",
+						"on_trash",
+					},
 					set(events[doctype]),
 				)
 				for event, path in events[doctype].items():

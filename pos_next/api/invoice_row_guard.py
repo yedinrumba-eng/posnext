@@ -21,14 +21,25 @@ INVOICE_ROW_DOCTYPES = ("Sales Invoice Item", "Sales Invoice Payment", "Sales Ta
 
 def block_standalone_invoice_row(doc, method=None) -> None:
 	"""before_insert / before_validate / before_update_after_submit / on_trash of the child doctypes."""
-	if doc.get("parenttype") != "Sales Invoice":
-		return
 	if _actor() == "Administrator":
+		return
+	if canonical_parenttype(doc) != "Sales Invoice":
 		return
 	frappe.throw(
 		_("Rows of Sales Invoice {0} are saved only with the invoice").format(doc.get("parent") or ""),
 		frappe.PermissionError,
 	)
+
+
+def canonical_parenttype(doc) -> str:
+	"""Name of the DocType the row's parenttype resolves to as the database sees it, or "" if none."""
+	parenttype = doc.get("parenttype")
+	if not isinstance(parenttype, str) or not parenttype:
+		return ""
+	try:
+		return frappe.get_meta(parenttype).name
+	except frappe.DoesNotExistError:
+		return ""
 
 
 def block_update_after_submit(doc, method=None) -> None:
