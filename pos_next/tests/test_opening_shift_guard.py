@@ -49,6 +49,8 @@ class FakeShift:
 		self.pos_profile = "P1"
 		self.user = "u1"
 		self.pos_closing_shift = ""
+		self.docstatus = 0
+		self.name = "OS-1"
 		self.is_new = mock.MagicMock(return_value=False)
 		self.validate_pos_profile_and_cashier = mock.MagicMock()
 		self.set_status = mock.MagicMock()
@@ -156,7 +158,7 @@ class OpeningCleanCase(unittest.TestCase):
 		opening.POSOpeningShift.validate(clean)
 		clean.set_status.assert_called_once_with()
 
-	def test_new_shift_drops_client_closing_link(self):
+	def test_validate_always_drops_client_closing_link(self):
 		fresh = FakeShift()
 		fresh.pos_closing_shift = "x"
 		fresh.is_new.return_value = True
@@ -165,7 +167,43 @@ class OpeningCleanCase(unittest.TestCase):
 		saved = FakeShift()
 		saved.pos_closing_shift = "x"
 		opening.POSOpeningShift.validate(saved)
-		self.assertEqual(saved.pos_closing_shift, "x")
+		self.assertEqual(saved.pos_closing_shift, "")
+
+	def test_submit_rejects_a_second_open_shift(self):
+		fake = FakeShift()
+		fake.docstatus = 1
+		fake.name = "OS-2"
+		self.fake_frappe.db.exists.return_value = True
+		with self.assertRaisesRegex(RuntimeError, "already has an open POS Opening Shift"):
+			opening.POSOpeningShift.validate(fake)
+		self.fake_frappe.db.exists.assert_called_once_with(
+			"POS Opening Shift", {"user": "u1", "docstatus": 1, "status": "Open", "name": ["!=", "OS-2"]}
+		)
+		fake.set_status.assert_not_called()
+
+	def test_draft_save_skips_the_open_shift_check(self):
+		fake = FakeShift()
+		opening.POSOpeningShift.validate(fake)
+		self.fake_frappe.db.exists.assert_not_called()
+
+	def test_submit_without_another_open_shift_passes(self):
+		fake = FakeShift()
+		fake.docstatus = 1
+		self.fake_frappe.db.exists.return_value = False
+		opening.POSOpeningShift.validate(fake)
+		fake.set_status.assert_called_once_with()
+
+	def test_put_submit_with_falsy_link_opens_clean(self):
+		fake = FakeShift()
+		fake.docstatus = 1
+		fake.pos_closing_shift = 0
+		fake.status = ""
+		fake.is_new.return_value = False
+		self.fake_frappe.db.exists.return_value = False
+		fake.set_status = lambda: opening.POSOpeningShift.set_status(fake)
+		opening.POSOpeningShift.validate(fake)
+		self.assertEqual(fake.pos_closing_shift, "")
+		self.assertEqual(fake.status, "Open")
 
 	def test_shift_user_must_read_the_profile(self):
 		fake = FakeShift()
@@ -205,6 +243,56 @@ class ClosingFlagsCase(unittest.TestCase):
 		closing.POSClosingShift.on_cancel(self.fake)
 		self.assertEqual(self.flags_at_save, [True])
 		self.assertEqual(self.shift.pos_closing_shift, "")
+
+
+class ShiftRowGuardCase(unittest.TestCase):
+	def setUp(self):
+		self.guard = importlib.import_module("pos_next.api.shift_row_guard")
+		self.actor = "cashier@example.com"
+		fake_frappe = mock.MagicMock()
+		fake_frappe.throw.side_effect = _throw
+		for patch in (
+			mock.patch.object(self.guard, "frappe", new=fake_frappe),
+			mock.patch.object(self.guard, "_", new=lambda text: text),
+			mock.patch.object(self.guard, "_actor", new=lambda: self.actor),
+		):
+			patch.start()
+			self.addCleanup(patch.stop)
+
+	def test_loose_opening_row_is_rejected(self):
+		row = Row(doctype="POS Opening Shift Detail", parenttype="POS Opening Shift", parent="OS-1")
+		with self.assertRaisesRegex(RuntimeError, "Rows of POS Opening Shift OS-1 are saved only with the shift"):
+			self.guard.block_standalone_shift_row(row)
+
+	def test_loose_closing_rows_are_rejected(self):
+		for doctype in self.guard.SHIFT_ROW_DOCTYPES[1:]:
+			with self.subTest(doctype=doctype):
+				row = Row(doctype=doctype, parenttype="POS Closing Shift", parent="CS-1")
+				with self.assertRaisesRegex(RuntimeError, "Rows of POS Closing Shift CS-1"):
+					self.guard.block_standalone_shift_row(row)
+
+	def test_administrator_and_other_parents_pass(self):
+		self.actor = "Administrator"
+		self.guard.block_standalone_shift_row(
+			Row(doctype="POS Opening Shift Detail", parenttype="POS Opening Shift", parent="OS-1")
+		)
+		self.actor = "cashier@example.com"
+		self.guard.block_standalone_shift_row(
+			Row(doctype="Sales Invoice Reference", parenttype="POS Closing Entry", parent="PCE-1")
+		)
+
+	def test_hooks_point_at_the_shift_row_guard(self):
+		from pos_next.tests.test_invoice_row_guard import _doc_events
+
+		events = _doc_events()
+		for doctype in self.guard.SHIFT_ROW_DOCTYPES:
+			with self.subTest(doctype=doctype):
+				self.assertEqual(
+					{"before_insert", "before_validate", "before_update_after_submit", "on_trash"},
+					set(events[doctype]),
+				)
+				for path in events[doctype].values():
+					self.assertEqual("pos_next.api.shift_row_guard.block_standalone_shift_row", path)
 
 
 if __name__ == "__main__":

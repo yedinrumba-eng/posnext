@@ -238,6 +238,36 @@ doc_events = {
 		"before_update_after_submit": "pos_next.api.invoice_row_guard.block_standalone_invoice_row",
 		"on_trash": "pos_next.api.invoice_row_guard.block_standalone_invoice_row"
 	},
+	"POS Opening Shift Detail": {
+		"before_insert": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"before_validate": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"before_update_after_submit": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"on_trash": "pos_next.api.shift_row_guard.block_standalone_shift_row"
+	},
+	"POS Closing Shift Detail": {
+		"before_insert": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"before_validate": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"before_update_after_submit": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"on_trash": "pos_next.api.shift_row_guard.block_standalone_shift_row"
+	},
+	"POS Closing Shift Taxes": {
+		"before_insert": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"before_validate": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"before_update_after_submit": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"on_trash": "pos_next.api.shift_row_guard.block_standalone_shift_row"
+	},
+	"Sales Invoice Reference": {
+		"before_insert": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"before_validate": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"before_update_after_submit": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"on_trash": "pos_next.api.shift_row_guard.block_standalone_shift_row"
+	},
+	"POS Payment Entry Reference": {
+		"before_insert": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"before_validate": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"before_update_after_submit": "pos_next.api.shift_row_guard.block_standalone_shift_row",
+		"on_trash": "pos_next.api.shift_row_guard.block_standalone_shift_row"
+	},
 	"POS Profile": {
 		"on_update": "pos_next.realtime_events.emit_pos_profile_updated_event"
 	}

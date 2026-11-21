@@ -39,8 +39,8 @@ def duplicate_modes(rows) -> list:
 
 class POSOpeningShift(Document):
     def validate(self):
-        if self.is_new():
-            self.pos_closing_shift = ""
+        # korvex fork: the closing link is written only by the close, never through validate (spec 042).
+        self.pos_closing_shift = ""
         self.validate_pos_profile_and_cashier()
         dupes = duplicate_modes(self.get("balance_details") or [])
         if dupes:
@@ -48,6 +48,15 @@ class POSOpeningShift(Document):
                 _("Mode of payment {0} is listed twice in the opening balance").format(
                     ", ".join(str(m) for m in dupes)
                 ),
+                title=_("Opening check"),
+            )
+        # korvex fork: one open shift per cashier on every route (spec 042).
+        if self.docstatus == 1 and frappe.db.exists(
+            "POS Opening Shift",
+            {"user": self.user, "docstatus": 1, "status": "Open", "name": ["!=", self.name]},
+        ):
+            frappe.throw(
+                _("This cashier already has an open POS Opening Shift. Close it before opening another"),
                 title=_("Opening check"),
             )
         self.set_status()
