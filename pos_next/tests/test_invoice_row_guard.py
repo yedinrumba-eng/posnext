@@ -110,15 +110,24 @@ class TestInvoiceRowGuard(GuardCase):
 				with self.assertRaisesRegex(RuntimeError, "Rows of Sales Invoice SINV-1"):
 					module.block_standalone_invoice_row(row)
 
-	def test_6_unknown_or_empty_parenttype_passes(self):
+	def test_6_unknown_empty_or_non_text_parenttype(self):
 		module.block_standalone_invoice_row(
 			Row(doctype="Sales Invoice Payment", parenttype="No Such DocType", parent="X-1")
 		)
 		self.throw.assert_not_called()
-		module.frappe.get_meta.reset_mock()
-		module.block_standalone_invoice_row(Row(doctype="Sales Invoice Payment", parenttype=None, parent="X-1"))
-		self.throw.assert_not_called()
-		module.frappe.get_meta.assert_not_called()
+		for empty in (None, ""):
+			with self.subTest(parenttype=empty):
+				module.frappe.get_meta.reset_mock()
+				module.block_standalone_invoice_row(
+					Row(doctype="Sales Invoice Payment", parenttype=empty, parent="X-1")
+				)
+				self.throw.assert_not_called()
+				module.frappe.get_meta.assert_not_called()
+		for parenttype in (["Sales Invoice"], {"a": 1}):
+			with self.subTest(parenttype=parenttype):
+				row = Row(doctype="Sales Invoice Payment", parenttype=parenttype, parent="SINV-1")
+				with self.assertRaisesRegex(RuntimeError, "Row parenttype must be text"):
+					module.block_standalone_invoice_row(row)
 
 	def test_7_shift_guard_resolves_parenttype(self):
 		guard = importlib.import_module("pos_next.api.shift_row_guard")
@@ -137,6 +146,20 @@ class TestInvoiceRowGuard(GuardCase):
 			with self.subTest(parenttype=parenttype):
 				row = Row(doctype="POS Closing Shift Detail", parenttype=parenttype, parent="CS-1")
 				with self.assertRaisesRegex(RuntimeError, message):
+					guard.block_standalone_shift_row(row)
+
+	def test_8_shift_guard_rejects_non_text_parenttype(self):
+		guard = importlib.import_module("pos_next.api.shift_row_guard")
+		for patch in (
+			mock.patch.object(guard, "_", new=lambda text: text),
+			mock.patch.object(guard, "_actor", new=lambda: self.actor),
+		):
+			patch.start()
+			self.addCleanup(patch.stop)
+		for parenttype in (["POS Opening Shift"], {"a": 1}):
+			with self.subTest(parenttype=parenttype):
+				row = Row(doctype="POS Opening Shift Detail", parenttype=parenttype, parent="OS-1")
+				with self.assertRaisesRegex(RuntimeError, "Row parenttype must be text"):
 					guard.block_standalone_shift_row(row)
 
 	def test_3_a_submitted_invoice_changes_only_with_override(self):

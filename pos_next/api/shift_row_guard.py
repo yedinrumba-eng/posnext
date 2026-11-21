@@ -25,7 +25,7 @@ SHIFT_PARENTS = ("POS Opening Shift", "POS Closing Shift")
 
 
 def block_standalone_shift_row(doc, method=None) -> None:
-	"""before_insert / before_validate / before_update_after_submit / on_trash of the shift child doctypes."""
+	"""before_insert / before_validate / before_submit / before_cancel / before_update_after_submit / on_trash of the shift child doctypes."""
 	if _actor() == "Administrator":
 		return
 	parenttype = canonical_parenttype(doc)

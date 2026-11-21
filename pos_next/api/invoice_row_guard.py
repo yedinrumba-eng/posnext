@@ -20,7 +20,7 @@ INVOICE_ROW_DOCTYPES = ("Sales Invoice Item", "Sales Invoice Payment", "Sales Ta
 
 
 def block_standalone_invoice_row(doc, method=None) -> None:
-	"""before_insert / before_validate / before_update_after_submit / on_trash of the child doctypes."""
+	"""before_insert / before_validate / before_submit / before_cancel / before_update_after_submit / on_trash of the child doctypes."""
 	if _actor() == "Administrator":
 		return
 	if canonical_parenttype(doc) != "Sales Invoice":
@@ -34,8 +34,10 @@ def block_standalone_invoice_row(doc, method=None) -> None:
 def canonical_parenttype(doc) -> str:
 	"""Name of the DocType the row's parenttype resolves to as the database sees it, or "" if none."""
 	parenttype = doc.get("parenttype")
-	if not isinstance(parenttype, str) or not parenttype:
+	if parenttype is None or parenttype == "":
 		return ""
+	if not isinstance(parenttype, str):
+		frappe.throw(_("Row parenttype must be text"), frappe.PermissionError)
 	try:
 		return frappe.get_meta(parenttype).name
 	except frappe.DoesNotExistError:
