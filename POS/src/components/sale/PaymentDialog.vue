@@ -270,6 +270,10 @@
 							<div v-if="snap.overLimit" class="text-sm text-red-600 text-start">
 								{{ __('EBT/SNAP amount exceeds the SNAP-eligible total') }}
 							</div>
+							<div v-if="settingsStore.snapTaxExemptModeOfPayment && snap.ebtCap > 0" class="flex items-center justify-between text-sm">
+								<span class="text-gray-600 text-start">{{ __('Charge on EBT') }}</span>
+								<span class="font-bold text-gray-900 text-end">{{ formatCurrency(snap.ebtCap) }}</span>
+							</div>
 							<!-- Grand Total -->
 							<div class="flex items-center justify-between pt-2 mt-1 border-t border-gray-300">
 								<span :class="['font-bold text-gray-900 text-start', isCompactMode ? 'text-sm' : 'text-base']">{{ __('Grand Total') }}</span>
@@ -1373,6 +1377,8 @@ const changeAmount = computed(() => {
 })
 
 const canComplete = computed(() => {
+	// An offline sale with too much EBT would be rejected on sync (rule 4)
+	if (snap.value.overLimit) return false
 	// If partial payment is allowed, can complete with any amount > 0
 	if (props.allowPartialPayment) {
 		return totalPaid.value > 0 && paymentEntries.value.length > 0
@@ -1585,6 +1591,20 @@ function quickAddPayment(method) {
 	lastSelectedMethod.value = method
 
 	let amt = remainingAmount.value
+
+	// EBT long press: never more than the SNAP-eligible net still uncovered
+	const ebtMode = settingsStore.snapTaxExemptModeOfPayment
+	if (ebtMode && method.mode_of_payment === ebtMode) {
+		amt = Math.min(amt, snap.value.ebtDue)
+		if (amt <= 0) {
+			frappe.show_alert({
+				message: __('Nothing left to charge on EBT'),
+				indicator: 'orange'
+			})
+			return
+		}
+	}
+
 	let isPartialWalletPayment = false
 
 	// Wallet payment validation: limit to available balance

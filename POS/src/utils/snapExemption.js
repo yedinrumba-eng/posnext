@@ -10,18 +10,22 @@ export const SNAP_ALLOCATION = "taxable_first"
  *
  * @param {{lines: Array<{net: number, taxRate: number, snapEligible: boolean}>, ebtPaid: number,
  *   method: string, allocation?: string}} args
- * @returns {{exemption: number, eligibleTotal: number, overLimit: boolean}}
+ * @returns {{exemption: number, eligibleTotal: number, overLimit: boolean, ebtCap: number,
+ *   ebtDue: number}} ebtCap = eligible net (what the cashier charges on EBT); ebtDue = what is left
+ *   under that cap after the EBT already entered
  */
 export function snapExemption({ lines, ebtPaid, method, allocation = SNAP_ALLOCATION }) {
 	const ebt = Number(ebtPaid) || 0
 	const eligible = lines.filter((line) => line.snapEligible)
 	const eligibleTotal = eligible.reduce((sum, line) => sum + (Number(line.net) || 0), 0)
 	const overLimit = ebt > eligibleTotal + 0.005
+	const ebtCap = roundCurrency(eligibleTotal, 2, method)
+	const ebtDue = roundCurrency(Math.max(0, eligibleTotal - ebt), 2, method)
 
 	const taxable = eligible.filter((line) => Number(line.taxRate) > 0)
 	const taxableNet = taxable.reduce((sum, line) => sum + (Number(line.net) || 0), 0)
 	if (ebt <= 0 || taxableNet === 0) {
-		return { exemption: 0, eligibleTotal, overLimit }
+		return { exemption: 0, eligibleTotal, overLimit, ebtCap, ebtDue }
 	}
 
 	let covered
@@ -35,5 +39,5 @@ export function snapExemption({ lines, ebtPaid, method, allocation = SNAP_ALLOCA
 
 	const tax = taxable.reduce((sum, line) => sum + ((Number(line.net) || 0) * Number(line.taxRate)) / 100, 0)
 	const exemption = roundCurrency((tax * covered) / taxableNet, 2, method)
-	return { exemption, eligibleTotal, overLimit }
+	return { exemption, eligibleTotal, overLimit, ebtCap, ebtDue }
 }

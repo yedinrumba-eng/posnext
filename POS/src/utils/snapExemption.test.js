@@ -41,4 +41,28 @@ describe("snapExemption", () => {
 		expect(r.overLimit).toBe(true)
 		expect(r.eligibleTotal).toBe(35)
 	})
+
+	it("charge on EBT is the eligible net when nothing is paid on EBT yet", () => {
+		const r = snapExemption({ lines: LINES, ebtPaid: 0, method: METHOD })
+		expect(r.ebtCap).toBe(35)
+		expect(r.ebtDue).toBe(35)
+	})
+
+	it("ebtDue is what is left under the cap and never negative", () => {
+		expect(snapExemption({ lines: LINES, ebtPaid: 10, method: METHOD }).ebtDue).toBe(25)
+		expect(snapExemption({ lines: LINES, ebtPaid: 40, method: METHOD }).ebtDue).toBe(0)
+	})
+
+	it("a line without the snapEligible key is not eligible", () => {
+		const r = snapExemption({ lines: [{ net: 9, taxRate: 0 }], ebtPaid: 0, method: METHOD })
+		expect(r.ebtCap).toBe(0)
+	})
+
+	it("ebtCap is rounded to cents", () => {
+		const lines = [
+			{ net: 0.1, taxRate: 0, snapEligible: true },
+			{ net: 0.2, taxRate: 0, snapEligible: true },
+		]
+		expect(snapExemption({ lines, ebtPaid: 0, method: METHOD }).ebtCap).toBe(0.3)
+	})
 })
