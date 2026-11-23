@@ -554,6 +554,7 @@ const submitResource = submitClosingShift
 const showInvoiceDetails = ref(false)
 const showSuccessReport = ref(false) // Track if shift is closed and showing report
 const errorMessage = ref('') // User-friendly error message
+let closingLock = false // blocks a second Close Shift click while the queue is read (spec 048a)
 
 // Watch dialog open state
 watch(open, async (isOpen) => {
@@ -629,8 +630,13 @@ const canSubmit = computed(() => {
 })
 
 async function submitClosing() {
-	if (!closingData.value) return
-	await syncStore.loadPendingInvoices()
+	if (!closingData.value || closingLock) return
+	closingLock = true
+	try {
+		await syncStore.loadPendingInvoices()
+	} finally {
+		closingLock = false
+	}
 	if (offlineBlock.value) return
 
 	try {
@@ -667,12 +673,14 @@ async function submitClosing() {
 async function syncNow() {
 	let failed = false
 	try {
-		await syncStore.syncAllPending()
+		const result = await syncStore.syncAllPending()
+		if (result?.failed > 0) failed = true
 	} catch (error) {
 		console.error("Error syncing offline sales:", error)
 		failed = true
 	}
 	await syncStore.loadPendingInvoices()
+	closingData.value = null
 	await loadClosingData()
 	if (failed) {
 		errorMessage.value = __("Sync failed. Check the connection and try again.")

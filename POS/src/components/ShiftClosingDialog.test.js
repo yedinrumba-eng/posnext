@@ -73,4 +73,49 @@ describe("ShiftClosingDialog offline gate", () => {
 		).toBe(true)
 		expect(dialog).toContain('v-if="offlineBlock && !showSuccessReport"')
 	})
+
+	it("Sync now treats a returned failure as a failed sync", () => {
+		const text = body(dialog, "syncNow")
+		expect(
+			increasing(
+				text.indexOf("const result = await syncStore.syncAllPending()"),
+				text.indexOf("if (result?.failed > 0) failed = true"),
+				text.indexOf("} catch (error) {"),
+			),
+		).toBe(true)
+		expect(text.split("failed = true").length - 1).toBe(2)
+	})
+
+	it("Sync now drops the stale shift data before reloading it", () => {
+		const text = body(dialog, "syncNow")
+		expect(
+			increasing(
+				text.indexOf("await syncStore.loadPendingInvoices()"),
+				text.indexOf("closingData.value = null"),
+				text.indexOf("await loadClosingData()"),
+				text.indexOf("if (failed) {"),
+			),
+		).toBe(true)
+		expect(
+			increasing(
+				dialog.indexOf('v-else-if="closingData"'),
+				dialog.indexOf('v-else-if="closingDataResource.error || errorMessage"'),
+			),
+		).toBe(true)
+	})
+
+	it("a second Close Shift click while the queue is read does nothing", () => {
+		expect(dialog).toContain("let closingLock = false")
+		const text = body(dialog, "submitClosing")
+		expect(
+			increasing(
+				text.indexOf("if (!closingData.value || closingLock) return"),
+				text.indexOf("closingLock = true"),
+				text.indexOf("await syncStore.loadPendingInvoices()"),
+				text.indexOf("} finally {"),
+				text.indexOf("closingLock = false"),
+				text.indexOf("submitResource.submit("),
+			),
+		).toBe(true)
+	})
 })
