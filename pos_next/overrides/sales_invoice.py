@@ -14,12 +14,12 @@ from erpnext.accounts.utils import get_account_currency
 from pos_next.price_rules import PRICE_OVERRIDE_ROLES
 
 SHIFT_MISSING_MESSAGE = "POS sales and returns need an open POS Opening Shift"
-OWNER_RETURN_ROLE = "Dueño"
+OWNER_DESK_ROLE = "Dueño"
 NO_OPEN_SHIFT_MESSAGE = (
-	"No open POS Opening Shift on POS Profile {0}. Open the register shift before this return"
+	"No open POS Opening Shift on POS Profile {0}. Open the register shift before this sale or return"
 )
 MANY_OPEN_SHIFTS_MESSAGE = (
-	"More than one open POS Opening Shift on POS Profile {0}. Close the extra shifts before this return"
+	"More than one open POS Opening Shift on POS Profile {0}. Close the extra shifts before this sale or return"
 )
 
 
@@ -80,20 +80,25 @@ def offline_sale_shift(
 	return name
 
 
-def link_owner_return(doc) -> bool:
-	"""Put an owner's Desk POS return on the only open shift of its POS Profile; True when it did."""
-	if not cint(doc.get("is_return")):
-		return False
+def link_owner_desk_shift(doc) -> bool:
+	"""Put an owner's Desk POS sale or return on the only open shift of its POS Profile; True when it did."""
 	if doc.flags.get("pos_next_api") or doc.flags.get("from_closing_shift"):
 		return False
 	roles = set(frappe.get_roles())
-	if "System Manager" in roles or OWNER_RETURN_ROLE not in roles:
+	if "System Manager" in roles or OWNER_DESK_ROLE not in roles:
 		return False
 	if not doc.get("pos_profile"):
 		return False
 	current = doc.get("posa_pos_opening_shift")
-	if current and frappe.db.get_value("POS Opening Shift", current, "user") == frappe.session.user:
-		return False
+	if current:
+		row = frappe.db.get_value("POS Opening Shift", current, ["user", "status", "docstatus"], as_dict=True)
+		if (
+			row
+			and row.get("user") == frappe.session.user
+			and row.get("status") == "Open"
+			and cint(row.get("docstatus")) == 1
+		):
+			return False
 	found = frappe.get_list(
 		"POS Opening Shift",
 		filters={"pos_profile": doc.pos_profile, "company": doc.company, "docstatus": 1, "status": "Open"},
@@ -171,8 +176,8 @@ class CustomSalesInvoice(SalesInvoice):
 					title=frappe._("Shift check"),
 				)
 			return
-		# korvex fork: an owner's Desk return joins the only open shift of its POS Profile (spec 050).
-		owner_return = link_owner_return(self)
+		# korvex fork: an owner's Desk POS sale or return joins the only open shift of its POS Profile (specs 050, 052).
+		owner_linked = link_owner_desk_shift(self)
 		name = self.get("posa_pos_opening_shift")
 		# korvex fork: hold the shift row until this sale commits; a close waits for it (spec 047).
 		shift = _shift_row(name, for_update=True)
@@ -186,7 +191,7 @@ class CustomSalesInvoice(SalesInvoice):
 			set(frappe.get_roles()),
 			self.pos_profile,
 			self.company,
-			bool(self.flags.get("from_closing_shift")) or owner_return,
+			bool(self.flags.get("from_closing_shift")) or owner_linked,
 			can_read,
 		)
 		if error:

@@ -85,7 +85,7 @@ class ReturnCase(unittest.TestCase):
 	def test_owner_return_links_the_only_open_shift(self):
 		self.frappe.get_list.return_value = ["OS-9"]
 		doc = self._doc()
-		self.assertTrue(override.link_owner_return(doc))
+		self.assertTrue(override.link_owner_desk_shift(doc))
 		self.assertEqual(doc.posa_pos_opening_shift, "OS-9")
 		filters = {"pos_profile": "P1", "company": "C1", "docstatus": 1, "status": "Open"}
 		self.frappe.get_list.assert_called_once_with(
@@ -102,14 +102,13 @@ class ReturnCase(unittest.TestCase):
 				self.frappe.get_list.return_value = found
 				doc = self._doc()
 				with self.assertRaisesRegex(RuntimeError, f"^{message}"):
-					override.link_owner_return(doc)
+					override.link_owner_desk_shift(doc)
 				self.assertIsNone(doc.posa_pos_opening_shift)
 
 	def test_only_an_owner_desk_return_links(self):
 		cases = (
 			("cashier", {}, ["Cajero"]),
 			("system manager", {}, ["Dueño", "System Manager"]),
-			("sale, not return", {"is_return": 0}, ["Dueño"]),
 			("pos api", {"flags": Row(pos_next_api=True)}, ["Dueño"]),
 			("closing shift", {"flags": Row(from_closing_shift=True)}, ["Dueño"]),
 			("no profile", {"pos_profile": ""}, ["Dueño"]),
@@ -117,30 +116,32 @@ class ReturnCase(unittest.TestCase):
 		for label, changes, roles in cases:
 			with self.subTest(label):
 				self.frappe.get_roles.return_value = roles
-				self.assertFalse(override.link_owner_return(self._doc(**changes)))
+				self.assertFalse(override.link_owner_desk_shift(self._doc(**changes)))
 		self.frappe.get_list.assert_not_called()
 		self.frappe.db.get_value.assert_not_called()
 
 	def test_owner_keeps_his_own_shift(self):
-		self.frappe.db.get_value.return_value = "o"
+		self.frappe.db.get_value.return_value = Row(user="o", status="Open", docstatus=1)
 		doc = self._doc(posa_pos_opening_shift="OS-1")
-		self.assertFalse(override.link_owner_return(doc))
-		self.frappe.db.get_value.assert_called_once_with("POS Opening Shift", "OS-1", "user")
+		self.assertFalse(override.link_owner_desk_shift(doc))
+		self.frappe.db.get_value.assert_called_once_with(
+			"POS Opening Shift", "OS-1", ["user", "status", "docstatus"], as_dict=True
+		)
 		self.frappe.get_list.assert_not_called()
 
 	def test_owner_return_moves_off_a_cashier_shift(self):
-		self.frappe.db.get_value.return_value = "a"
+		self.frappe.db.get_value.return_value = Row(user="a", status="Open", docstatus=1)
 		self.frappe.get_list.return_value = ["OS-2"]
 		doc = self._doc(posa_pos_opening_shift="OS-1")
-		self.assertTrue(override.link_owner_return(doc))
+		self.assertTrue(override.link_owner_desk_shift(doc))
 		self.assertEqual(doc.posa_pos_opening_shift, "OS-2")
 
 	def test_a_linked_owner_return_may_use_the_cashier_shift(self):
 		self.frappe.db.get_value.return_value = S
 		self.frappe.has_permission.return_value = True
 		enforce = override.CustomSalesInvoice.enforce_pos_shift
-		with mock.patch.object(override, "link_owner_return", return_value=True):
+		with mock.patch.object(override, "link_owner_desk_shift", return_value=True):
 			enforce(FakeInvoice(shift="S1"))
-		with mock.patch.object(override, "link_owner_return", return_value=False):
+		with mock.patch.object(override, "link_owner_desk_shift", return_value=False):
 			with self.assertRaisesRegex(RuntimeError, "belongs to another user"):
 				enforce(FakeInvoice(shift="S1"))
