@@ -74,5 +74,7 @@ export function kitchenReasonText(reason) {
 		return "The kitchen rejected the signature. Tell the owner"
 	if (CANNOT_SEND_REASONS.includes(text))
 		return "This sale cannot be sent. Tell the kitchen in person"
+	if (text === "queued" || text === "manual_retry")
+		return "Sending to the kitchen…"
 	return "Error sending to the kitchen"
 }

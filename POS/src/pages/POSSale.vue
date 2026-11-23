@@ -167,7 +167,7 @@
 			</POSHeader>
 
 			<!-- Orders that did not reach the kitchen (spec 031b2) -->
-			<KitchenBand :rows="kitchenRows" @retry="handleKitchenRetry" @told="handleKitchenTold" />
+			<KitchenBand :rows="kitchenRows" :busy="kitchenBand.busy" @retry="handleKitchenRetry" @told="handleKitchenTold" />
 
 			<!-- Main Content: Responsive Layout -->
 			<div
@@ -1148,21 +1148,29 @@ const kitchenRows = computed(() => [
 	...offlineKitchenRows(offlineStore.pendingInvoicesList),
 ]);
 
+let kitchenUnmounted = false;
+
 async function tick() {
-	await offlineStore.loadPendingInvoices();
-	await kitchenBand.refresh(cartStore.posOpeningShift, offlineStore.isOffline);
+	try {
+		await offlineStore.loadPendingInvoices();
+	} catch (error) {
+		log.warn("Kitchen band: could not read the offline queue", error);
+	}
+	await kitchenBand.poll(cartStore.posOpeningShift, offlineStore.isOffline);
 }
 
 async function handleKitchenRetry(invoice) {
-	const ok = await kitchenBand.retry(invoice);
+	const result = await kitchenBand.retry(invoice);
+	if (result === null) return;
 	await tick();
-	if (!ok) showWarning(__("Could not update. Tell the kitchen in person"));
+	if (!result) showWarning(__("Could not update. Tell the kitchen in person"));
 }
 
 async function handleKitchenTold(invoice) {
-	const ok = await kitchenBand.markTold(invoice);
+	const result = await kitchenBand.markTold(invoice);
+	if (result === null) return;
 	await tick();
-	if (!ok) showWarning(__("Could not update. Tell the kitchen in person"));
+	if (!result) showWarning(__("Could not update. Tell the kitchen in person"));
 }
 
 watch(() => offlineStore.pendingInvoicesCount, () => {
@@ -1170,6 +1178,7 @@ watch(() => offlineStore.pendingInvoicesCount, () => {
 });
 
 onUnmounted(() => {
+	kitchenUnmounted = true;
 	kitchenBand.stopPolling();
 });
 
@@ -1361,16 +1370,16 @@ onMounted(async () => {
 
 		updateLayoutBounds();
 		await draftsStore.updateDraftsCount();
-
-		// BODEGA kitchen band: loadSetup never throws and leaves everything off on a site without it
-		await kitchenBand.loadSetup();
-		await tick();
-		kitchenBand.startPolling(tick);
 	} catch (error) {
 		log.error("Error checking shift:", error);
 	} finally {
 		uiStore.setLoading(false);
 	}
+
+	// BODEGA kitchen band: runs even if the shift check threw; tick never throws
+	await tick();
+	if (kitchenUnmounted) return;
+	kitchenBand.startPolling(tick);
 });
 
 watch(

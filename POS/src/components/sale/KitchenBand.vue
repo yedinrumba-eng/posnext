@@ -12,7 +12,8 @@
 					<button
 						v-if="row.canRetry"
 						type="button"
-						class="px-2 py-1 rounded bg-white border border-red-300 text-red-700 font-medium"
+						class="px-2 py-1 rounded bg-white border border-red-300 text-red-700 font-medium disabled:opacity-50"
+						:disabled="busy.includes(row.invoice)"
 						@click="emit('retry', row.invoice)"
 					>
 						{{ __("Retry") }}
@@ -20,7 +21,8 @@
 					<button
 						v-if="row.canMarkTold"
 						type="button"
-						class="px-2 py-1 rounded bg-white border border-red-300 text-red-700 font-medium"
+						class="px-2 py-1 rounded bg-white border border-red-300 text-red-700 font-medium disabled:opacity-50"
+						:disabled="busy.includes(row.invoice)"
 						@click="emit('told', row.invoice)"
 					>
 						{{ __("Told the kitchen") }}
@@ -37,6 +39,10 @@ import { kitchenReasonText } from "@/utils/kitchenOrder"
 
 defineProps({
 	rows: {
+		type: Array,
+		default: () => [],
+	},
+	busy: {
 		type: Array,
 		default: () => [],
 	},

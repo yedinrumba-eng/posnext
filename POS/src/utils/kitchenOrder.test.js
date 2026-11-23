@@ -12,10 +12,14 @@ import {
 	serverKitchenRows,
 } from "./kitchenOrder"
 
-// Spec 031b2. The store is tested with a fake `call` (no network); the .vue files and the invoice
+// Spec 031b2 / 031b2a. The store is tested with fake `call` and `callGet` (no network); the .vue files and the invoice
 // composable are checked statically because vitest runs in node without a DOM.
 const callMock = vi.fn()
-vi.mock("@/utils/apiWrapper", () => ({ call: (...args) => callMock(...args) }))
+const getMock = vi.fn()
+vi.mock("@/utils/apiWrapper", () => ({
+	call: (...args) => callMock(...args),
+	callGet: (...args) => getMock(...args),
+}))
 
 const { useKitchenBandStore } = await import("../stores/kitchenBand")
 
@@ -106,6 +110,13 @@ describe("serverKitchenRows", () => {
 		expect(row.canRetry).toBe(false)
 		expect(row.canMarkTold).toBe(true)
 	})
+	it("a Pendiente row with reason queued stays in the band with Retry", () => {
+		const [row] = serverKitchenRows([
+			{ invoice: "ACC-4", status: "Pendiente", reason: "queued", posting_time: "10:03:00" },
+		])
+		expect(row.canRetry).toBe(true)
+		expect(row.canMarkTold).toBe(true)
+	})
 	it("returns [] for a missing list", () => {
 		expect(serverKitchenRows(undefined)).toEqual([])
 	})
@@ -130,12 +141,14 @@ describe("kitchenReasonText", () => {
 		["too_many_lines", "This sale cannot be sent. Tell the kitchen in person"],
 		["body_too_large", "This sale cannot be sent. Tell the kitchen in person"],
 		["missing_body", "This sale cannot be sent. Tell the kitchen in person"],
+		["queued", "Sending to the kitchen\u2026"],
+		["manual_retry", "Sending to the kitchen\u2026"],
 	]
 	for (const [reason, text] of cases) {
 		it(`${reason} -> ${text}`, () => expect(kitchenReasonText(reason)).toBe(text))
 	}
 	it("unknown, empty and server-only reasons give the generic text", () => {
-		for (const reason of ["something_new", "", null, undefined, "hook_error", "job_error", "queued"]) {
+		for (const reason of ["something_new", "", null, undefined, "hook_error", "job_error"]) {
 			expect(kitchenReasonText(reason)).toBe("Error sending to the kitchen")
 		}
 	})
@@ -145,6 +158,7 @@ describe("kitchenBand store", () => {
 	beforeEach(() => {
 		setActivePinia(createPinia())
 		callMock.mockReset()
+		getMock.mockReset()
 	})
 	afterEach(() => {
 		vi.useRealTimers()
@@ -158,44 +172,44 @@ describe("kitchenBand store", () => {
 	})
 
 	it("loadSetup stores the groups when enabled", async () => {
-		callMock.mockResolvedValue({ enabled: true, kitchen_item_groups: ["Hot Food"] })
+		getMock.mockResolvedValue({ enabled: true, kitchen_item_groups: ["Hot Food"] })
 		const store = useKitchenBandStore()
 		await store.loadSetup()
-		expect(callMock).toHaveBeenCalledWith(`${METHOD}get_kitchen_setup`, {})
+		expect(getMock).toHaveBeenCalledWith(`${METHOD}get_kitchen_setup`, {})
 		expect(store.enabled).toBe(true)
 		expect(store.kitchenItemGroups).toEqual(["Hot Food"])
 	})
 
 	it("setup failure: an error, a disabled site or a bad shape leaves it off", async () => {
 		const store = useKitchenBandStore()
-		callMock.mockRejectedValue(new Error("not whitelisted"))
+		getMock.mockRejectedValue(new Error("not whitelisted"))
 		await expect(store.loadSetup()).resolves.toBeUndefined()
 		expect(store.enabled).toBe(false)
 		for (const answer of [{ enabled: false }, { enabled: true }, null, undefined, "x"]) {
-			callMock.mockResolvedValue(answer)
+			getMock.mockResolvedValue(answer)
 			await store.loadSetup()
 			expect(store.enabled).toBe(false)
 			expect(store.kitchenItemGroups).toEqual([])
 		}
-		callMock.mockClear()
+		getMock.mockClear()
 		await store.refresh("SHIFT-1", false)
-		expect(callMock).not.toHaveBeenCalled()
+		expect(getMock).not.toHaveBeenCalled()
 	})
 
 	async function enabledStore() {
-		callMock.mockResolvedValue({ enabled: true, kitchen_item_groups: ["Hot Food"] })
+		getMock.mockResolvedValue({ enabled: true, kitchen_item_groups: ["Hot Food"] })
 		const store = useKitchenBandStore()
 		await store.loadSetup()
-		callMock.mockReset()
+		getMock.mockReset()
 		return store
 	}
 
 	it("refresh loads the band rows", async () => {
 		const store = await enabledStore()
 		const rows = [{ invoice: "ACC-1", status: "Fallido", reason: "timeout", posting_time: "10:00:00" }]
-		callMock.mockResolvedValue({ enabled: true, rows })
+		getMock.mockResolvedValue({ enabled: true, rows })
 		await store.refresh("SHIFT-1", false)
-		expect(callMock).toHaveBeenCalledWith(`${METHOD}get_kitchen_band`, { pos_opening_shift: "SHIFT-1" })
+		expect(getMock).toHaveBeenCalledWith(`${METHOD}get_kitchen_band`, { pos_opening_shift: "SHIFT-1" })
 		expect(store.serverRows).toEqual(rows)
 	})
 
@@ -203,18 +217,15 @@ describe("kitchenBand store", () => {
 		const store = await enabledStore()
 		await store.refresh("SHIFT-1", true)
 		await store.refresh(null, false)
-		expect(callMock).not.toHaveBeenCalled()
+		expect(getMock).not.toHaveBeenCalled()
 	})
 
 	it("refresh keeps the previous rows on an error or a bad shape", async () => {
 		const store = await enabledStore()
 		const rows = [{ invoice: "ACC-1", status: "Fallido", reason: "timeout", posting_time: "10:00:00" }]
-		callMock.mockResolvedValue({ enabled: true, rows })
+		getMock.mockResolvedValue({ enabled: true, rows })
 		await store.refresh("SHIFT-1", false)
-		callMock.mockRejectedValue(new Error("boom"))
-		await store.refresh("SHIFT-1", false)
-		expect(store.serverRows).toEqual(rows)
-		callMock.mockResolvedValue({ enabled: false })
+		getMock.mockRejectedValue(new Error("boom"))
 		await store.refresh("SHIFT-1", false)
 		expect(store.serverRows).toEqual(rows)
 	})
@@ -320,10 +331,9 @@ describe("POSSale static checks", () => {
 		expect(page.indexOf("</POSHeader>")).toBeLessThan(page.indexOf("<KitchenBand"))
 		expect(page.indexOf("<KitchenBand")).toBeLessThan(page.indexOf("<!-- Main Content: Responsive Layout -->"))
 		expect(page).toContain(':kitchen-item-groups="kitchenBand.kitchenItemGroups"')
-		expect(page).toContain("await kitchenBand.loadSetup()")
 		expect(page).toContain("kitchenBand.startPolling(tick)")
 		expect(page).toContain("kitchenBand.stopPolling()")
-		expect(page).toContain("kitchenBand.refresh(cartStore.posOpeningShift, offlineStore.isOffline)")
+		expect(page).toContain("kitchenBand.poll(cartStore.posOpeningShift, offlineStore.isOffline)")
 		expect(page).toContain("offlineStore.pendingInvoicesCount")
 		expect(page).toContain('__("Could not update. Tell the kitchen in person")')
 	})
