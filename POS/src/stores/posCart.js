@@ -228,6 +228,7 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		currentDraftId.value = null
 		targetDoctype.value = "Sales Invoice"
 		kitchenOrderType.value = null
+		appOrder.value = null
 
 		// Reset offer processing state
 		suppressOfferReapply.value = false
@@ -256,6 +257,13 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		kitchenOrderType.value = value
 	}
 
+	// BODEGA app order loaded into this cart (spec 031a4): {order_id, short_code, fulfillment, total_cents, tip_cents}
+	const appOrder = ref(null)
+
+	function setAppOrder(value) {
+		appOrder.value = value
+	}
+
 	async function submitInvoice() {
 		if (invoiceItems.value.length === 0) {
 			showWarning(__("Cart is empty"))
@@ -266,7 +274,12 @@ export const usePOSCartStore = defineStore("posCart", () => {
 			return
 		}
 
-		return await baseSubmitInvoice(targetDoctype.value, deliveryDate.value, kitchenOrderType.value)
+		return await baseSubmitInvoice(
+			targetDoctype.value,
+			deliveryDate.value,
+			kitchenOrderType.value,
+			appOrder.value?.order_id ?? null,
+		)
 	}
 
 	async function createSalesOrder() {
@@ -1732,6 +1745,8 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		setDeliveryDate,
 		kitchenOrderType,
 		setKitchenOrderType,
+		appOrder,
+		setAppOrder,
 
 		// Utilities
 		cancelPendingOfferProcessing: () => {

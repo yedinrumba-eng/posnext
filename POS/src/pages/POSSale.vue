@@ -77,6 +77,32 @@
 						</span>
 					</button>
 					<button
+						v-if="appOrders.enabled"
+						@click="uiStore.showAppOrdersDialog = true"
+						class="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-purple-50 flex items-center gap-3 transition-colors relative"
+					>
+						<svg
+							class="w-5 h-5 text-purple-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+							/>
+						</svg>
+						<span>{{ __("App orders") }}</span>
+						<span
+							v-if="appOrders.toCharge.length > 0"
+							class="ms-auto text-xs bg-purple-600 text-white px-1.5 py-0.5 rounded-full"
+						>
+							{{ appOrders.toCharge.length }}
+						</span>
+					</button>
+					<button
 						@click="uiStore.showHistoryDialog = true"
 						class="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 flex items-center gap-3 transition-colors"
 					>
@@ -168,6 +194,21 @@
 
 			<!-- Orders that did not reach the kitchen (spec 031b2) -->
 			<KitchenBand :rows="kitchenRows" :busy="kitchenBand.busy" @retry="handleKitchenRetry" @told="handleKitchenTold" />
+
+			<!-- BODEGA app order loaded in the cart (spec 031a4) -->
+			<div v-if="cartStore.appOrder" class="bg-purple-50 border-b border-purple-200 px-4 py-2 text-sm text-purple-800 flex flex-wrap items-center gap-3">
+				<span class="font-medium">{{ __("App order #{0} · {1}", [cartStore.appOrder.short_code, __(fulfillmentText(cartStore.appOrder.fulfillment))]) }}</span>
+				<button
+					type="button"
+					class="underline"
+					@click="handleUnlinkAppOrder"
+				>
+					{{ __("Unlink") }}
+				</button>
+				<span v-if="appOrders.missing.length > 0" class="text-red-700 font-medium">
+					{{ __("Not in the register: {0}. Add them by hand.", [appOrders.missing.join(", ")]) }}
+				</span>
+			</div>
 
 			<!-- Main Content: Responsive Layout -->
 			<div
@@ -453,6 +494,8 @@
 			:discount-amount="cartStore.totalDiscount"
 			:target-doctype="cartStore.targetDoctype"
 			:kitchen-item-groups="kitchenBand.kitchenItemGroups"
+			:app-order="cartStore.appOrder"
+			:driver-card-mode="appOrders.driverCardMode"
 			@payment-completed="handlePaymentCompleted"
 			@update-additional-discount="handleAdditionalDiscountUpdate"
 		/>
@@ -483,6 +526,19 @@
 				:currency="shiftStore.profileCurrency"
 				@load-draft="handleLoadDraft"
 				@drafts-updated="draftsStore.updateDraftsCount"
+			/>
+
+			<!-- App Orders Dialog (spec 031a4) -->
+			<AppOrdersDialog
+				v-model="uiStore.showAppOrdersDialog"
+				:to-charge="appOrders.toCharge"
+				:cancelled-after-charge="appOrders.cancelledAfterCharge"
+				:sync="appOrders.sync"
+				:is-offline="offlineStore.isOffline"
+				:cart-empty="cartStore.isEmpty"
+				:currency="shiftStore.profileCurrency"
+				:today="localToday()"
+				@charge="handleChargeAppOrder"
 			/>
 
 			<!-- Return Invoice Dialog -->
@@ -953,6 +1009,7 @@ import BatchSerialDialog from "@/components/sale/BatchSerialDialog.vue";
 import CouponDialog from "@/components/sale/CouponDialog.vue";
 import CreateCustomerDialog from "@/components/sale/CreateCustomerDialog.vue";
 import CustomerDialog from "@/components/sale/CustomerDialog.vue";
+import AppOrdersDialog from "@/components/sale/AppOrdersDialog.vue";
 import DraftInvoicesDialog from "@/components/sale/DraftInvoicesDialog.vue";
 import InvoiceCart from "@/components/sale/InvoiceCart.vue";
 import KitchenBand from "@/components/sale/KitchenBand.vue";
@@ -995,6 +1052,8 @@ import { usePOSSyncStore } from "@/stores/posSync";
 import { usePOSUIStore } from "@/stores/posUI";
 import { logger } from "@/utils/logger";
 import { useKitchenBandStore } from "@/stores/kitchenBand";
+import { useAppOrdersStore } from "@/stores/appOrders";
+import { cartPlan, fulfillmentText } from "@/utils/appOrders";
 import { offlineKitchenRows, serverKitchenRows } from "@/utils/kitchenOrder";
 
 // Initialize stores
@@ -1003,6 +1062,7 @@ const shiftStore = usePOSShiftStore();
 const uiStore = usePOSUIStore();
 const offlineStore = usePOSSyncStore();
 const kitchenBand = useKitchenBandStore();
+const appOrders = useAppOrdersStore();
 const draftsStore = usePOSDraftsStore();
 const posSettingsStore = usePOSSettingsStore();
 const itemStore = useItemSearchStore();
@@ -1157,6 +1217,79 @@ async function tick() {
 		log.warn("Kitchen band: could not read the offline queue", error);
 	}
 	await kitchenBand.poll(cartStore.posOpeningShift, offlineStore.isOffline);
+	await appOrders.poll(offlineStore.isOffline);
+}
+
+// Local calendar day as YYYY-MM-DD (spec 031a4)
+function localToday() {
+	const now = new Date();
+	const month = String(now.getMonth() + 1).padStart(2, "0");
+	const day = String(now.getDate()).padStart(2, "0");
+	return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function handleUnlinkAppOrder() {
+	cartStore.setAppOrder(null);
+	appOrders.missing = [];
+}
+
+// Emptying the cart drops the link to the app order
+watch(
+	() => cartStore.isEmpty,
+	(empty) => {
+		if (empty) {
+			cartStore.setAppOrder(null);
+			appOrders.missing = [];
+		}
+	}
+);
+
+// Load an app order into the empty cart with the POS prices (spec 031a4, D-031a.10, D-031a.12)
+async function handleChargeAppOrder(orderId) {
+	if (!cartStore.isEmpty) {
+		showWarning(__("Clear the cart first to charge an app order."));
+		return;
+	}
+	const order = await appOrders.loadOrder(orderId);
+	if (!order) {
+		showError(__("Could not load the app order. Try again."));
+		return;
+	}
+	if (!order.chargeable) {
+		showWarning(__("This app order can no longer be charged."));
+		await appOrders.refresh();
+		return;
+	}
+	cartStore.setAppOrder({
+		order_id: order.order_id,
+		short_code: order.short_code,
+		fulfillment: order.fulfillment,
+		total_cents: order.total_cents,
+		tip_cents: order.tip_cents,
+	});
+	const plan = cartPlan(order.lines, order.delivery_cents, appOrders.deliveryFeeItem);
+	const missing = [];
+	for (const entry of plan.entries) {
+		try {
+			const item = await itemStore.searchByBarcode(entry.code);
+			if (
+				!item ||
+				item.has_variants ||
+				item.has_serial_no ||
+				item.has_batch_no ||
+				needsWeightPrompt(posSettingsStore.kioskMode, item)
+			) {
+				missing.push(entry.code);
+				continue;
+			}
+			cartStore.addItem(item, entry.qty, true, shiftStore.currentProfile);
+		} catch (error) {
+			missing.push(entry.code);
+		}
+	}
+	if (plan.missingFee) missing.push("delivery fee");
+	appOrders.missing = missing;
+	uiStore.showAppOrdersDialog = false;
 }
 
 async function handleKitchenRetry(invoice) {
@@ -1927,6 +2060,11 @@ async function handlePaymentCompleted(paymentData) {
 			// Offline kitchen sale: the type travels with the queued sale and goes out when it syncs
 			if (paymentData.kitchen_order_type) {
 				invoiceData.korvex_order_type = paymentData.kitchen_order_type;
+			}
+
+			// App order: the server validates it when the queued sale syncs (D-031a.13)
+			if (cartStore.appOrder?.order_id) {
+				invoiceData.bodega_order_id = cartStore.appOrder.order_id;
 			}
 
 			await offlineStore.saveInvoiceOffline(invoiceData);

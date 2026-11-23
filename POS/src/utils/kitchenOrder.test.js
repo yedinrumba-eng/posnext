@@ -289,7 +289,7 @@ describe("PaymentDialog static checks", () => {
 describe("useInvoice and posCart static checks", () => {
 	it("submitInvoice sets korvex_order_type only for a Sales Invoice with a valid type", () => {
 		expect(invoice).toContain(
-			'async function submitInvoice(targetDoctype = "Sales Invoice", deliveryDate = null, kitchenOrderType = null)',
+			'async function submitInvoice(targetDoctype = "Sales Invoice", deliveryDate = null, kitchenOrderType = null, bodegaOrderId = null)',
 		)
 		expect(invoice).toMatch(
 			/if \(targetDoctype === "Sales Invoice" && ORDER_TYPES\.includes\(kitchenOrderType\)\) \{\s*invoiceData\.korvex_order_type = kitchenOrderType/,
@@ -303,7 +303,7 @@ describe("useInvoice and posCart static checks", () => {
 	it("posCart keeps, passes, clears and exports the type", () => {
 		expect(cart).toContain("const kitchenOrderType = ref(null)")
 		expect(cart).toMatch(/function setKitchenOrderType\(value\)/)
-		expect(cart).toContain("baseSubmitInvoice(targetDoctype.value, deliveryDate.value, kitchenOrderType.value)")
+		expect(cart).toContain("baseSubmitInvoice(\n\t\t\ttargetDoctype.value,\n\t\t\tdeliveryDate.value,\n\t\t\tkitchenOrderType.value,\n\t\t\tappOrder.value?.order_id ?? null,\n\t\t)")
 		expect(body(cart, "clearCart", "\t")).toContain("kitchenOrderType.value = null")
 		expect(cart).toMatch(/\n\t\tkitchenOrderType,\n\t\tsetKitchenOrderType,/)
 	})

@@ -705,7 +705,7 @@ export function useInvoice() {
 		return result?.data || result
 	}
 
-	async function submitInvoice(targetDoctype = "Sales Invoice", deliveryDate = null, kitchenOrderType = null) {
+	async function submitInvoice(targetDoctype = "Sales Invoice", deliveryDate = null, kitchenOrderType = null, bodegaOrderId = null) {
 		/**
 		 * Two-step submission process:
 		 * 1. Create/update draft invoice
@@ -763,6 +763,11 @@ export function useInvoice() {
 			// Counter order for the BODEGA kitchen (spec 031b2): only a valid choice on a Sales Invoice
 			if (targetDoctype === "Sales Invoice" && ORDER_TYPES.includes(kitchenOrderType)) {
 				invoiceData.korvex_order_type = kitchenOrderType
+			}
+
+			// BODEGA app order being charged (spec 031a4): the server validates it on submit
+			if (targetDoctype === "Sales Invoice" && typeof bodegaOrderId === "string" && bodegaOrderId) {
+				invoiceData.bodega_order_id = bodegaOrderId
 			}
 
 			// Add sales_team if provided

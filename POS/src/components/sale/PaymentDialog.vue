@@ -281,6 +281,22 @@
 							</div>
 						</div>
 
+						<!-- App order notices (spec 031a4) -->
+						<div v-if="appOrder" class="flex flex-col gap-1 px-3 py-2">
+							<div
+								v-if="appTotalMismatch(subtotal, discountAmount, appOrder.total_cents)"
+								class="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-sm text-yellow-800"
+							>
+								{{ __("App total {0}. Register total {1}. Charge the register total.", [formatCurrency(appOrder.total_cents / 100), formatCurrency(subtotal - discountAmount)]) }}
+							</div>
+							<div
+								v-if="appOrder.tip_cents > 0"
+								class="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-sm text-yellow-800"
+							>
+								{{ __("The app shows a {0} tip. It is not charged at the register.", [formatCurrency(appOrder.tip_cents / 100)]) }}
+							</div>
+						</div>
+
 						<!-- Payment Status - Two Equal Halves -->
 						<div class="border-t border-gray-200">
 							<div class="grid grid-cols-2 divide-x divide-gray-200">
@@ -744,6 +760,7 @@ import { usePOSSettingsStore } from "@/stores/posSettings"
 import { usePOSCartStore } from "@/stores/posCart"
 import { snapExemption } from "@/utils/snapExemption"
 import { DEFAULT_ORDER_TYPE, hasKitchenLines } from "@/utils/kitchenOrder"
+import { appTotalMismatch, visiblePaymentMethods } from "@/utils/appOrders"
 import { formatCurrency as formatCurrencyUtil, getCurrencySymbol } from "@/utils/currency"
 import { getPaymentIcon } from "@/utils/payment"
 import { offlineWorker } from "@/utils/offline/workerClient"
@@ -760,6 +777,15 @@ const { showWarning } = useToast()
 
 const props = defineProps({
 	modelValue: Boolean,
+	// BODEGA app order in this cart (spec 031a4) and the Mode of Payment hidden unless it is a delivery
+	appOrder: {
+		type: Object,
+		default: null,
+	},
+	driverCardMode: {
+		type: String,
+		default: null,
+	},
 	grandTotal: {
 		type: Number,
 		default: 0,
@@ -848,7 +874,7 @@ const isSalesOrder = computed(() => props.targetDoctype === "Sales Order")
 // To go / Dine in question: only for a Sales Invoice with kitchen lines (spec 031b2)
 const kitchenOrderType = ref(DEFAULT_ORDER_TYPE)
 const showKitchenChoice = computed(() =>
-	props.targetDoctype === "Sales Invoice" && hasKitchenLines(props.items, props.kitchenItemGroups)
+	props.targetDoctype === "Sales Invoice" && hasKitchenLines(props.items, props.kitchenItemGroups) && !props.appOrder
 )
 
 // Column refs for height matching
@@ -1232,13 +1258,14 @@ const availableWalletBalance = computed(() => {
 
 // Filter payment methods - hide wallet methods when loyalty is not enabled
 const filteredPaymentMethods = computed(() => {
-	return paymentMethods.value.filter(method => {
+	const shown = paymentMethods.value.filter(method => {
 		// If it's a wallet payment method, only show when loyalty/wallet is enabled
 		if (isWalletPaymentMethod(method.mode_of_payment)) {
 			return walletInfo.value.wallet_enabled
 		}
 		return true
 	})
+	return visiblePaymentMethods(shown, props.driverCardMode, props.appOrder)
 })
 
 // Sales Persons state
