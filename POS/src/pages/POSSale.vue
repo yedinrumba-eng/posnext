@@ -1288,6 +1288,11 @@ async function handleChargeAppOrder(orderId) {
 		showWarning(__("This app order can no longer be charged."));
 	} else if (outcome === "nothing_resolved") {
 		showWarning(__("No item of this order is in the POS catalog. See App orders."));
+	} else if (outcome === "fee_only") {
+		showWarning(__("Only the delivery fee was added. Add the products by hand, then charge."));
+		uiStore.showAppOrdersDialog = false;
+	} else if (outcome === "timeout") {
+		showError(__("The app order took too long to load. Try again."));
 	} else if (outcome === "charged") {
 		uiStore.showAppOrdersDialog = false;
 	}

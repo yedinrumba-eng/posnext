@@ -158,7 +158,7 @@ describe("round 2 wiring (031a4a)", () => {
 	it("T4: the dialog says when the list is cut and what is missing; the menu counts the total", () => {
 		expect(dialog).toContain('v-if="truncated"')
 		expect(dialog).toContain('__("Showing {0} of {1} orders", [toCharge.length, toChargeTotal])')
-		expect(dialog).toContain("Not in the POS catalog: {0}. Add them by hand and charge as a normal sale, or close it in Desk.")
+		expect(dialog).toContain("Not in the POS catalog: {0}. Sell it as a normal sale. The order stays in this list until the owner closes it in Desk.")
 		expect(dialog).toContain("unresolved.order_id === order.order_id")
 		expect(page).toContain('v-if="appOrders.toChargeTotal > 0"')
 		expect(page).toContain("{{ appOrders.toChargeTotal }}")
@@ -170,5 +170,24 @@ describe("round 2 wiring (031a4a)", () => {
 		expect(body(payment, "quickAddPayment")).toContain("isShownMethod(")
 		expect(payment).toContain("Register total before tax {1}")
 		expect(payment).not.toContain("Register total {1}.")
+	})
+})
+
+// Spec 031a4b. Static checks of round 3.
+describe("round 3 wiring (031a4b)", () => {
+	it("T6 B8: the dialog says Loading... when busy and each action has its text", () => {
+		expect(dialog).toContain('v-if="busy"')
+		expect(dialog).toContain('__("Loading...")')
+		expect(dialog).toContain("unresolved.action === 'close_in_desk'")
+		expect(dialog).toContain("Do not charge it here. Ask the owner to close it in Desk.")
+		expect(dialog).toContain("Sell it as a normal sale. The order stays in this list until the owner closes it in Desk.")
+		expect(dialog).not.toContain("Add them by hand and charge as a normal sale")
+	})
+	it("T7: the page handles fee_only and timeout", () => {
+		const handler = body(page, "handleChargeAppOrder")
+		expect(handler).toContain('"fee_only"')
+		expect(handler).toContain('"timeout"')
+		expect(handler).toContain("Only the delivery fee was added. Add the products by hand, then charge.")
+		expect(handler).toContain("The app order took too long to load. Try again.")
 	})
 })

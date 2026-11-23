@@ -29,6 +29,8 @@
 						{{ __("Clear the cart first to charge an app order.") }}
 					</p>
 
+					<p v-if="busy" class="text-sm text-gray-600">{{ __("Loading...") }}</p>
+
 					<p v-if="truncated" class="text-sm font-medium text-yellow-800">
 						{{ __("Showing {0} of {1} orders", [toCharge.length, toChargeTotal]) }}
 					</p>
@@ -59,10 +61,16 @@
 									{{ __("App tip {0}, not charged here", [formatCurrency(order.tip_cents / 100)]) }}
 								</p>
 								<p
-									v-if="unresolved && unresolved.order_id === order.order_id"
+									v-if="unresolved && unresolved.order_id === order.order_id && unresolved.action === 'close_in_desk'"
 									class="text-xs text-red-600 mt-0.5"
 								>
-									{{ __("Not in the POS catalog: {0}. Add them by hand and charge as a normal sale, or close it in Desk.", [unresolved.codes.join(", ")]) }}
+									{{ __("Not in the POS catalog: {0}. Do not charge it here. Ask the owner to close it in Desk.", [unresolved.codes.join(", ")]) }}
+								</p>
+								<p
+									v-else-if="unresolved && unresolved.order_id === order.order_id"
+									class="text-xs text-red-600 mt-0.5"
+								>
+									{{ __("Not in the POS catalog: {0}. Sell it as a normal sale. The order stays in this list until the owner closes it in Desk.", [unresolved.codes.join(", ")]) }}
 								</p>
 							</div>
 							<button

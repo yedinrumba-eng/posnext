@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { createAppOrderCharger } from "./appOrderCharge"
+import { CHARGE_TIMEOUT_MS, createAppOrderCharger } from "./appOrderCharge"
 
 // Spec 031a4a. The charger with fake deps that note their calls in order.
 const ORDER = {
@@ -21,7 +21,7 @@ function deferred() {
 	return { promise, resolve }
 }
 
-function setup(overrides = {}) {
+function setup(overrides = {}, options = undefined) {
 	const log = []
 	const state = { empty: true }
 	const deps = {
@@ -43,7 +43,7 @@ function setup(overrides = {}) {
 		setUnresolved: (value) => log.push(["setUnresolved", value]),
 		...overrides,
 	}
-	return { charger: createAppOrderCharger(deps), log, state }
+	return { charger: createAppOrderCharger(deps, options), log, state }
 }
 
 const names = (log, name) => log.filter((entry) => entry[0] === name)
@@ -73,7 +73,11 @@ describe("createAppOrderCharger", () => {
 			loadOrder: async (id) => {
 				log.push(["loadOrder", id])
 				await gate.promise
-				return { ...ORDER, order_id: id, lines: [{ line_no: 1, product_id: `ITEM-${id}`, qty: 1 }] }
+				return {
+					...ORDER,
+					order_id: id,
+					lines: [{ line_no: 1, product_id: `ITEM-${id}`, qty: 1 }],
+				}
 			},
 		})
 		const first = charger.charge("o1")
@@ -138,14 +142,19 @@ describe("createAppOrderCharger", () => {
 				delivery_cents: 300,
 				lines: [{ line_no: 1, product_id: "bacon-egg-cheese", qty: 1 }],
 			}),
-			resolveItem: async (code) => (code === "DELIVERY" ? { item_code: code } : null),
+			resolveItem: async (code) =>
+				code === "DELIVERY" ? { item_code: code } : null,
 		})
 		expect(await charger.charge("o1")).toBe("nothing_resolved")
 		expect(names(log, "addItem")).toHaveLength(0)
 		expect(names(log, "setAppOrder")).toHaveLength(0)
 		expect(names(log, "setUnresolved").at(-1)).toEqual([
 			"setUnresolved",
-			{ order_id: "o1", codes: ["bacon-egg-cheese", "delivery fee"] },
+			{
+				order_id: "o1",
+				codes: ["bacon-egg-cheese", "delivery fee"],
+				action: "sell_as_normal",
+			},
 		])
 		expect(names(log, "setMissing").at(-1)).toEqual(["setMissing", []])
 		expect(charger.busy.value).toBe(false)
@@ -169,7 +178,11 @@ describe("createAppOrderCharger", () => {
 		expect(await charger.charge("o1")).toBe("nothing_resolved")
 		expect(names(log, "addItem").map((entry) => entry[1])).toEqual(["A", "B"])
 		expect(names(log, "setAppOrder")).toHaveLength(0)
-		expect(names(log, "setUnresolved").at(-1)[1].codes).toEqual(["A", "B", "delivery fee"])
+		expect(names(log, "setUnresolved").at(-1)[1].codes).toEqual([
+			"A",
+			"B",
+			"delivery fee",
+		])
 	})
 
 	it("C9: one of two lines resolves: charged, linked after the last addItem, the other goes to missing", async () => {
@@ -181,11 +194,14 @@ describe("createAppOrderCharger", () => {
 					{ line_no: 2, product_id: "bacon-egg-cheese", qty: 1 },
 				],
 			}),
-			resolveItem: async (code) => (code === "bacon-egg-cheese" ? null : { item_code: code }),
+			resolveItem: async (code) =>
+				code === "bacon-egg-cheese" ? null : { item_code: code },
 		})
 		expect(await charger.charge("o1")).toBe("charged")
 		const order = log.map((entry) => entry[0])
-		expect(order.lastIndexOf("addItem")).toBeLessThan(order.indexOf("setAppOrder"))
+		expect(order.lastIndexOf("addItem")).toBeLessThan(
+			order.indexOf("setAppOrder"),
+		)
 		expect(names(log, "setAppOrder")[0][1]).toEqual({
 			order_id: "o1",
 			short_code: "A1",
@@ -193,6 +209,125 @@ describe("createAppOrderCharger", () => {
 			total_cents: 1000,
 			tip_cents: 0,
 		})
-		expect(names(log, "setMissing").at(-1)).toEqual(["setMissing", ["bacon-egg-cheese"]])
+		expect(names(log, "setMissing").at(-1)).toEqual([
+			"setMissing",
+			["bacon-egg-cheese"],
+		])
+	})
+
+	// Spec 031a4b.
+	const DELIVERY_ORDER = {
+		...ORDER,
+		fulfillment: "delivery",
+		delivery_cents: 300,
+	}
+
+	it("C10 (B1): delivery with fee and no line resolved links with only the fee line", async () => {
+		const { charger, log } = setup({
+			loadOrder: async () => ({
+				...DELIVERY_ORDER,
+				lines: [{ line_no: 1, product_id: "bacon-egg-cheese", qty: 1 }],
+			}),
+			resolveItem: async (code) =>
+				code === "DELIVERY" ? { item_code: code } : null,
+		})
+		expect(await charger.charge("o1")).toBe("fee_only")
+		expect(names(log, "addItem")).toEqual([["addItem", "DELIVERY", 1]])
+		expect(names(log, "setAppOrder")).toHaveLength(1)
+		expect(names(log, "setAppOrder")[0][1].fulfillment).toBe("delivery")
+		const order = log.map((entry) => entry[0])
+		expect(order.indexOf("addItem")).toBeLessThan(order.indexOf("setAppOrder"))
+		expect(names(log, "setMissing").at(-1)).toEqual([
+			"setMissing",
+			["bacon-egg-cheese"],
+		])
+		expect(
+			names(log, "setUnresolved").every((entry) => entry[1] === null),
+		).toBe(true)
+	})
+
+	it("C11 (B2): delivery with fee and every line addItem throwing still adds the fee", async () => {
+		const { charger, log } = setup({
+			loadOrder: async () => ({
+				...DELIVERY_ORDER,
+				lines: [
+					{ line_no: 1, product_id: "A", qty: 1 },
+					{ line_no: 2, product_id: "B", qty: 1 },
+				],
+			}),
+			addItem: (item, qty) => {
+				if (item.item_code !== "DELIVERY") throw new Error("cannot add")
+				log.push(["addItem", item.item_code, qty])
+			},
+		})
+		expect(await charger.charge("o1")).toBe("fee_only")
+		expect(names(log, "addItem")).toEqual([["addItem", "DELIVERY", 1]])
+		expect(names(log, "setAppOrder")).toHaveLength(1)
+		expect(names(log, "setMissing").at(-1)).toEqual(["setMissing", ["A", "B"]])
+	})
+
+	it("C12 (B3): pickup without fee and nothing resolved is not linked and says sell_as_normal", async () => {
+		const { charger, log } = setup({ resolveItem: async () => null })
+		expect(await charger.charge("o1")).toBe("nothing_resolved")
+		expect(names(log, "setAppOrder")).toHaveLength(0)
+		expect(names(log, "setUnresolved").at(-1)[1].action).toBe("sell_as_normal")
+	})
+
+	it("C13 (B4): delivery with no fee and nothing resolved is not linked and says close_in_desk", async () => {
+		const { charger, log } = setup({
+			loadOrder: async () => ({
+				...ORDER,
+				fulfillment: "delivery",
+				delivery_cents: 0,
+			}),
+			resolveItem: async () => null,
+		})
+		expect(await charger.charge("o1")).toBe("nothing_resolved")
+		expect(names(log, "setAppOrder")).toHaveLength(0)
+		expect(names(log, "setUnresolved").at(-1)[1]).toEqual({
+			order_id: "o1",
+			codes: ["BURGER"],
+			action: "close_in_desk",
+		})
+	})
+
+	it("C14 (B5): delivery with fee but no delivery fee item is not linked and says close_in_desk", async () => {
+		const { charger, log } = setup({
+			loadOrder: async () => DELIVERY_ORDER,
+			deliveryFeeItem: () => null,
+			resolveItem: async () => null,
+		})
+		expect(await charger.charge("o1")).toBe("nothing_resolved")
+		expect(names(log, "setAppOrder")).toHaveLength(0)
+		const value = names(log, "setUnresolved").at(-1)[1]
+		expect(value.action).toBe("close_in_desk")
+		expect(value.codes.at(-1)).toBe("delivery fee")
+	})
+
+	it("C15 (B6): loadOrder that never answers gives timeout and busy goes back to false", async () => {
+		expect(CHARGE_TIMEOUT_MS).toBe(20000)
+		const { charger, log } = setup(
+			{ loadOrder: () => new Promise(() => {}) },
+			{ timeoutMs: 20 },
+		)
+		expect(await charger.charge("o1")).toBe("timeout")
+		expect(charger.busy.value).toBe(false)
+		expect(names(log, "addItem")).toHaveLength(0)
+		expect(names(log, "setAppOrder")).toHaveLength(0)
+	})
+
+	it("C16 (B7): resolveItem that answers after the deadline gives timeout and a late answer does nothing", async () => {
+		const gate = deferred()
+		const { charger, log } = setup(
+			{ resolveItem: () => gate.promise },
+			{ timeoutMs: 20 },
+		)
+		expect(await charger.charge("o1")).toBe("timeout")
+		gate.resolve({ item_code: "BURGER" })
+		await new Promise((r) => setTimeout(r, 0))
+		expect(names(log, "addItem")).toHaveLength(0)
+		expect(names(log, "setAppOrder")).toHaveLength(0)
+		expect(names(log, "setMissing")).toHaveLength(0)
+		expect(charger.busy.value).toBe(false)
 	})
 })
