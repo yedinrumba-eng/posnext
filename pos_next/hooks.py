@@ -198,6 +198,8 @@ override_doctype_class = {
 # Hook on document methods and events
 
 doc_events = {
+	# korvex fork: names of shifts, sales and their rows never change (spec 050).
+	"*": {"before_rename": "pos_next.api.rename_guard.block_rename"},
 	"Item": {
 		"validate": "pos_next.validations.validate_item"
 	},
