@@ -76,8 +76,22 @@ def counted_amounts(rows, modes: list) -> dict:
     return counted
 
 
+def shift_invoice_filters(pos_opening_shift: str, company: str, pos_profile: str) -> dict:
+    """Return the filters of the submitted POS sales a shift close counts."""
+
+    return {
+        "docstatus": 1,
+        "is_pos": 1,
+        "posa_pos_opening_shift": pos_opening_shift,
+        "company": company,
+        "pos_profile": pos_profile,
+    }
+
+
 class POSClosingShift(Document):
     def validate(self):
+        # korvex fork: lock the shift first; sales on it wait until this close commits (spec 047).
+        status = frappe.db.get_value("POS Opening Shift", self.pos_opening_shift, "status", for_update=True)
         self._apply_server_totals()
         user = frappe.get_all(
             "POS Closing Shift",
@@ -99,7 +113,7 @@ class POSClosingShift(Document):
                 title=_("Invalid Period"),
             )
 
-        if frappe.db.get_value("POS Opening Shift", self.pos_opening_shift, "status") != "Open":
+        if status != "Open":
             frappe.throw(
                 _("Selected POS Opening Shift should be open."),
                 title=_("Invalid Opening Entry"),
@@ -172,6 +186,23 @@ class POSClosingShift(Document):
             ),
         )
 
+    def _recount_invoices(self) -> None:
+        """Fail the close when a POS sale of the shift is not in the list the cashier counted."""
+
+        found = frappe.db.get_values(
+            "Sales Invoice",
+            shift_invoice_filters(self.pos_opening_shift, self.company, self.pos_profile),
+            "name",
+            for_update=True,
+            pluck=True,
+        )
+        listed = [row.get("sales_invoice") for row in self.pos_transactions if row.get("sales_invoice")]
+        if set(found or []) != set(listed):
+            frappe.throw(
+                _("Sales reached this shift while it was closing. Close the shift again"),
+                title=_("Closing check"),
+            )
+
     def update_payment_reconciliation(self):
         # update the difference values in Payment Reconciliation child table
         # get default precision for site
@@ -187,6 +218,8 @@ class POSClosingShift(Document):
         # korvex fork: the only writer of the shift status (spec 040).
         opening_entry.flags.from_closing_shift = True
         opening_entry.save()
+        # korvex fork: a locking read sees every committed sale, not the old snapshot (spec 047).
+        self._recount_invoices()
         # link invoices with this closing shift so ERPNext can block edits
         self._set_closing_entry_invoices()
 
@@ -471,28 +504,19 @@ def get_cashiers(doctype, txt, searchfield, start, page_len, filters):
 
 @frappe.whitelist()
 def get_pos_invoices(pos_opening_shift, doctype=None):
-    if not doctype:
-        pos_profile = frappe.db.get_value("POS Opening Shift", pos_opening_shift, "pos_profile")
-        use_pos_invoice = False
-        doctype = "POS Invoice" if use_pos_invoice else "Sales Invoice"
-    submit_printed_invoices(pos_opening_shift, doctype)
-    cond = " and ifnull(consolidated_invoice,'') = ''" if doctype == "POS Invoice" else ""
-    data = frappe.db.sql(
-        f"""
-	select
-		name
-	from
-		`tab{doctype}`
-	where
-		docstatus = 1 and posa_pos_opening_shift = %s{cond}
-	""",
-        (pos_opening_shift),
-        as_dict=1,
+    if doctype not in (None, "Sales Invoice"):
+        frappe.throw(_("Only Sales Invoice is supported"))
+    shift = frappe.db.get_value("POS Opening Shift", pos_opening_shift, ["company", "pos_profile"], as_dict=True)
+    if not shift:
+        return []
+    submit_printed_invoices(pos_opening_shift, "Sales Invoice")
+    names = frappe.get_all(
+        "Sales Invoice",
+        filters=shift_invoice_filters(pos_opening_shift, shift["company"], shift["pos_profile"]),
+        pluck="name",
+        order_by="creation asc",
     )
-
-    data = [frappe.get_doc(doctype, d.name).as_dict() for d in data]
-
-    return data
+    return [frappe.get_doc("Sales Invoice", n).as_dict() for n in names]
 
 
 @frappe.whitelist()

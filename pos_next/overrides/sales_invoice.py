@@ -73,8 +73,8 @@ def offline_sale_shift(
 	return name
 
 
-def _shift_row(name: str | None) -> dict | None:
-	"""Read the POS Opening Shift fields the sale rule needs."""
+def _shift_row(name: str | None, for_update: bool = False) -> dict | None:
+	"""Read the POS Opening Shift fields the sale rule needs; lock the row when for_update."""
 	if not name:
 		return None
 	return frappe.db.get_value(
@@ -82,6 +82,7 @@ def _shift_row(name: str | None) -> dict | None:
 		name,
 		["name", "user", "status", "docstatus", "pos_profile", "company"],
 		as_dict=True,
+		for_update=for_update,
 	)
 
 
@@ -123,9 +124,16 @@ class CustomSalesInvoice(SalesInvoice):
 	def enforce_pos_shift(self):
 		"""Reject a POS sale or return without an open shift of the user who rings it."""
 		if not cint(self.is_pos):
+			# korvex fork: a shift counts POS money only (spec 047).
+			if self.get("posa_pos_opening_shift"):
+				frappe.throw(
+					frappe._("Only POS sales and returns carry a POS Opening Shift"),
+					title=frappe._("Shift check"),
+				)
 			return
 		name = self.get("posa_pos_opening_shift")
-		shift = _shift_row(name)
+		# korvex fork: hold the shift row until this sale commits; a close waits for it (spec 047).
+		shift = _shift_row(name, for_update=True)
 		user = frappe.session.user
 		can_read = bool(
 			shift and shift["user"] != user and frappe.has_permission("POS Opening Shift", "read", doc=name)
