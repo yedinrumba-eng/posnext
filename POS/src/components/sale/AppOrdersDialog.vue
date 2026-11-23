@@ -29,6 +29,10 @@
 						{{ __("Clear the cart first to charge an app order.") }}
 					</p>
 
+					<p v-if="truncated" class="text-sm font-medium text-yellow-800">
+						{{ __("Showing {0} of {1} orders", [toCharge.length, toChargeTotal]) }}
+					</p>
+
 					<!-- Empty State -->
 					<div v-if="toCharge.length === 0" class="text-center py-8">
 						<p class="text-sm font-medium text-gray-900">{{ __("No app orders to charge") }}</p>
@@ -54,11 +58,17 @@
 								<p v-if="order.tip_cents > 0" class="text-xs text-gray-500 mt-0.5">
 									{{ __("App tip {0}, not charged here", [formatCurrency(order.tip_cents / 100)]) }}
 								</p>
+								<p
+									v-if="unresolved && unresolved.order_id === order.order_id"
+									class="text-xs text-red-600 mt-0.5"
+								>
+									{{ __("Not in the POS catalog: {0}. Add them by hand and charge as a normal sale, or close it in Desk.", [unresolved.codes.join(", ")]) }}
+								</p>
 							</div>
 							<button
 								type="button"
 								class="px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-								:disabled="!cartEmpty"
+								:disabled="!cartEmpty || busy"
 								@click="$emit('charge', order.order_id)"
 							>
 								{{ __("Charge") }}
@@ -93,6 +103,22 @@ const props = defineProps({
 	},
 	isOffline: Boolean,
 	cartEmpty: Boolean,
+	busy: {
+		type: Boolean,
+		default: false,
+	},
+	toChargeTotal: {
+		type: Number,
+		default: 0,
+	},
+	truncated: {
+		type: Boolean,
+		default: false,
+	},
+	unresolved: {
+		type: Object,
+		default: null,
+	},
 	currency: {
 		type: String,
 		default: "USD",

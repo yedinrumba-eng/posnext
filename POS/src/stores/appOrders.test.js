@@ -155,4 +155,43 @@ describe("appOrders store", () => {
 		const store = useAppOrdersStore()
 		await expect(store.loadOrder("a")).resolves.toBeNull()
 	})
+
+	it("S1: refresh reads to_charge_total and to_charge_truncated", async () => {
+		impl.get.mockResolvedValue({ ...LIST_OK, to_charge_total: 130, to_charge_truncated: true })
+		const store = useAppOrdersStore()
+		await store.refresh()
+		expect(store.toChargeTotal).toBe(130)
+		expect(store.toChargeTruncated).toBe(true)
+	})
+
+	it("S2: without those fields it falls back to the length and false", async () => {
+		impl.get.mockResolvedValue(LIST_OK)
+		const store = useAppOrdersStore()
+		await store.refresh()
+		expect(store.toChargeTotal).toBe(1)
+		expect(store.toChargeTruncated).toBe(false)
+	})
+
+	it("S3: enabled false resets total, truncated and unresolved", async () => {
+		impl.get.mockResolvedValueOnce({ ...LIST_OK, to_charge_total: 130, to_charge_truncated: true })
+		const store = useAppOrdersStore()
+		await store.refresh()
+		store.unresolved = { order_id: "a", codes: ["x"] }
+		impl.get.mockResolvedValueOnce({ enabled: false })
+		await store.refresh()
+		expect(store.toChargeTotal).toBe(0)
+		expect(store.toChargeTruncated).toBe(false)
+		expect(store.unresolved).toBeNull()
+	})
+
+	it("S4: unresolved of an order that left the list is cleared; one still there stays", async () => {
+		impl.get.mockResolvedValue(LIST_OK)
+		const store = useAppOrdersStore()
+		store.unresolved = { order_id: "a", codes: ["x"] }
+		await store.refresh()
+		expect(store.unresolved).toEqual({ order_id: "a", codes: ["x"] })
+		store.unresolved = { order_id: "gone", codes: ["x"] }
+		await store.refresh()
+		expect(store.unresolved).toBeNull()
+	})
 })

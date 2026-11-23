@@ -96,10 +96,10 @@
 						</svg>
 						<span>{{ __("App orders") }}</span>
 						<span
-							v-if="appOrders.toCharge.length > 0"
+							v-if="appOrders.toChargeTotal > 0"
 							class="ms-auto text-xs bg-purple-600 text-white px-1.5 py-0.5 rounded-full"
 						>
-							{{ appOrders.toCharge.length }}
+							{{ appOrders.toChargeTotal }}
 						</span>
 					</button>
 					<button
@@ -536,6 +536,10 @@
 				:sync="appOrders.sync"
 				:is-offline="offlineStore.isOffline"
 				:cart-empty="cartStore.isEmpty"
+				:busy="appOrderBusy"
+				:to-charge-total="appOrders.toChargeTotal"
+				:truncated="appOrders.toChargeTruncated"
+				:unresolved="appOrders.unresolved"
 				:currency="shiftStore.profileCurrency"
 				:today="localToday()"
 				@charge="handleChargeAppOrder"
@@ -1053,7 +1057,8 @@ import { usePOSUIStore } from "@/stores/posUI";
 import { logger } from "@/utils/logger";
 import { useKitchenBandStore } from "@/stores/kitchenBand";
 import { useAppOrdersStore } from "@/stores/appOrders";
-import { cartPlan, fulfillmentText } from "@/utils/appOrders";
+import { fulfillmentText } from "@/utils/appOrders";
+import { createAppOrderCharger } from "@/utils/appOrderCharge";
 import { offlineKitchenRows, serverKitchenRows } from "@/utils/kitchenOrder";
 
 // Initialize stores
@@ -1244,52 +1249,48 @@ watch(
 	}
 );
 
-// Load an app order into the empty cart with the POS prices (spec 031a4, D-031a.10, D-031a.12)
-async function handleChargeAppOrder(orderId) {
-	if (!cartStore.isEmpty) {
-		showWarning(__("Clear the cart first to charge an app order."));
-		return;
-	}
-	const order = await appOrders.loadOrder(orderId);
-	if (!order) {
-		showError(__("Could not load the app order. Try again."));
-		return;
-	}
-	if (!order.chargeable) {
-		showWarning(__("This app order can no longer be charged."));
-		await appOrders.refresh();
-		return;
-	}
-	cartStore.setAppOrder({
-		order_id: order.order_id,
-		short_code: order.short_code,
-		fulfillment: order.fulfillment,
-		total_cents: order.total_cents,
-		tip_cents: order.tip_cents,
-	});
-	const plan = cartPlan(order.lines, order.delivery_cents, appOrders.deliveryFeeItem);
-	const missing = [];
-	for (const entry of plan.entries) {
-		try {
-			const item = await itemStore.searchByBarcode(entry.code);
-			if (
-				!item ||
-				item.has_variants ||
-				item.has_serial_no ||
-				item.has_batch_no ||
-				needsWeightPrompt(posSettingsStore.kioskMode, item)
-			) {
-				missing.push(entry.code);
-				continue;
-			}
-			cartStore.addItem(item, entry.qty, true, shiftStore.currentProfile);
-		} catch (error) {
-			missing.push(entry.code);
+// Load an app order into the empty cart with the POS prices (spec 031a4a, D-031a.10, D-031a.12, D-031a.17)
+const { busy: appOrderBusy, charge: chargeAppOrder } = createAppOrderCharger({
+	isCartEmpty: () => cartStore.isEmpty,
+	loadOrder: (id) => appOrders.loadOrder(id),
+	refresh: () => appOrders.refresh(),
+	deliveryFeeItem: () => appOrders.deliveryFeeItem,
+	resolveItem: async (code) => {
+		const item = await itemStore.searchByBarcode(code);
+		if (
+			!item ||
+			item.has_variants ||
+			item.has_serial_no ||
+			item.has_batch_no ||
+			needsWeightPrompt(posSettingsStore.kioskMode, item)
+		) {
+			return null;
 		}
+		return item;
+	},
+	addItem: (item, qty) => cartStore.addItem(item, qty, true, shiftStore.currentProfile),
+	setAppOrder: (v) => cartStore.setAppOrder(v),
+	setMissing: (codes) => {
+		appOrders.missing = codes;
+	},
+	setUnresolved: (v) => {
+		appOrders.unresolved = v;
+	},
+});
+
+async function handleChargeAppOrder(orderId) {
+	const outcome = await chargeAppOrder(orderId);
+	if (outcome === "cart_not_empty") {
+		showWarning(__("Clear the cart first to charge an app order."));
+	} else if (outcome === "load_failed") {
+		showError(__("Could not load the app order. Try again."));
+	} else if (outcome === "not_chargeable") {
+		showWarning(__("This app order can no longer be charged."));
+	} else if (outcome === "nothing_resolved") {
+		showWarning(__("No item of this order is in the POS catalog. See App orders."));
+	} else if (outcome === "charged") {
+		uiStore.showAppOrdersDialog = false;
 	}
-	if (plan.missingFee) missing.push("delivery fee");
-	appOrders.missing = missing;
-	uiStore.showAppOrdersDialog = false;
 }
 
 async function handleKitchenRetry(invoice) {
@@ -2291,6 +2292,8 @@ async function handleLoadDraft(draft) {
 		}
 
 		const draftData = await draftsStore.loadDraft(draft);
+		cartStore.setAppOrder(null);
+		appOrders.missing = [];
 		cartStore.invoiceItems = draftData.items;
 		cartStore.setCustomer(draftData.customer);
 		cartStore.currentDraftId = draft.draft_id; // Set current draft ID

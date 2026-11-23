@@ -12,6 +12,9 @@ export const useAppOrdersStore = defineStore("appOrders", () => {
 	const cancelledAfterCharge = ref([])
 	const sync = ref(null)
 	const missing = ref([])
+	const toChargeTotal = ref(0)
+	const toChargeTruncated = ref(false)
+	const unresolved = ref(null)
 
 	function clearState() {
 		enabled.value = false
@@ -20,6 +23,9 @@ export const useAppOrdersStore = defineStore("appOrders", () => {
 		toCharge.value = []
 		cancelledAfterCharge.value = []
 		sync.value = null
+		toChargeTotal.value = 0
+		toChargeTruncated.value = false
+		unresolved.value = null
 	}
 
 	function removeCache() {
@@ -88,6 +94,18 @@ export const useAppOrdersStore = defineStore("appOrders", () => {
 				toCharge.value = result.to_charge
 				cancelledAfterCharge.value = result.cancelled_after_charge
 				sync.value = result.sync ?? null
+				toChargeTotal.value = Number.isInteger(result.to_charge_total)
+					? result.to_charge_total
+					: result.to_charge.length
+				toChargeTruncated.value = result.to_charge_truncated === true
+				if (
+					unresolved.value &&
+					!result.to_charge.some(
+						(order) => order.order_id === unresolved.value.order_id,
+					)
+				) {
+					unresolved.value = null
+				}
 			}
 		} catch (error) {
 			// keep the previous lists
@@ -127,6 +145,9 @@ export const useAppOrdersStore = defineStore("appOrders", () => {
 		cancelledAfterCharge,
 		sync,
 		missing,
+		toChargeTotal,
+		toChargeTruncated,
+		unresolved,
 		loadSetup,
 		applyCachedSetup,
 		refresh,

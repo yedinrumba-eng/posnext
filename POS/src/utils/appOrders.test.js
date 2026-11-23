@@ -4,7 +4,9 @@ import {
 	cartPlan,
 	daysOld,
 	fulfillmentText,
+	isShownMethod,
 	paymentText,
+	pickDefaultMethod,
 	syncWarningText,
 	visiblePaymentMethods,
 } from "./appOrders"
@@ -107,5 +109,36 @@ describe("texts", () => {
 			"App orders are not up to date. Tell the owner if this stays.",
 		)
 		expect(syncWarningText(null)).toBe("App orders are not up to date. Tell the owner if this stays.")
+	})
+})
+
+// Spec 031a4a. The preselected method must come from the methods that are shown.
+describe("pickDefaultMethod / isShownMethod", () => {
+	it("the visible default wins over the first one", () => {
+		const methods = [
+			{ mode_of_payment: "Cash" },
+			{ mode_of_payment: "Card", default: 1 },
+		]
+		expect(pickDefaultMethod(methods)).toBe(methods[1])
+	})
+	it("B7: with Card (Driver) as profile default and already filtered, the first left is picked", () => {
+		const shown = visiblePaymentMethods(
+			[
+				{ mode_of_payment: "Cash" },
+				{ mode_of_payment: "Card (Driver)", default: 1 },
+				{ mode_of_payment: "Card" },
+			],
+			"Card (Driver)",
+			null,
+		)
+		expect(pickDefaultMethod(shown)).toEqual({ mode_of_payment: "Cash" })
+	})
+	it("empty or not an array gives null; isShownMethod is true only for a listed method", () => {
+		expect(pickDefaultMethod([])).toBeNull()
+		expect(pickDefaultMethod(null)).toBeNull()
+		expect(isShownMethod(METHODS, { mode_of_payment: "Cash" })).toBe(true)
+		expect(isShownMethod(METHODS, { mode_of_payment: "Zelle" })).toBe(false)
+		expect(isShownMethod(METHODS, null)).toBe(false)
+		expect(isShownMethod(null, { mode_of_payment: "Cash" })).toBe(false)
 	})
 })

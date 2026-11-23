@@ -62,3 +62,15 @@ export function syncWarningText(sync) {
 	if (sync?.stopped) return "App orders stopped syncing. Tell the owner."
 	return "App orders are not up to date. Tell the owner if this stays."
 }
+
+// The method to preselect from the methods that are shown (031a4a, B7)
+export function pickDefaultMethod(methods) {
+	if (!Array.isArray(methods) || methods.length === 0) return null
+	return methods.find((method) => method.default) || methods[0]
+}
+
+// True only when the method is one of the shown methods (031a4a)
+export function isShownMethod(methods, method) {
+	if (!Array.isArray(methods) || !method) return false
+	return methods.some((m) => m.mode_of_payment === method.mode_of_payment)
+}

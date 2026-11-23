@@ -287,7 +287,7 @@
 								v-if="appTotalMismatch(subtotal, discountAmount, appOrder.total_cents)"
 								class="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-sm text-yellow-800"
 							>
-								{{ __("App total {0}. Register total {1}. Charge the register total.", [formatCurrency(appOrder.total_cents / 100), formatCurrency(subtotal - discountAmount)]) }}
+								{{ __("App total {0}. Register total before tax {1}. Charge the register total.", [formatCurrency(appOrder.total_cents / 100), formatCurrency(subtotal - discountAmount)]) }}
 							</div>
 							<div
 								v-if="appOrder.tip_cents > 0"
@@ -760,7 +760,7 @@ import { usePOSSettingsStore } from "@/stores/posSettings"
 import { usePOSCartStore } from "@/stores/posCart"
 import { snapExemption } from "@/utils/snapExemption"
 import { DEFAULT_ORDER_TYPE, hasKitchenLines } from "@/utils/kitchenOrder"
-import { appTotalMismatch, visiblePaymentMethods } from "@/utils/appOrders"
+import { appTotalMismatch, isShownMethod, pickDefaultMethod, visiblePaymentMethods } from "@/utils/appOrders"
 import { formatCurrency as formatCurrencyUtil, getCurrencySymbol } from "@/utils/currency"
 import { getPaymentIcon } from "@/utils/payment"
 import { offlineWorker } from "@/utils/offline/workerClient"
@@ -1141,8 +1141,7 @@ const paymentMethodsResource = createResource({
 		paymentMethods.value = data?.message || data || []
 		// Set first method as last selected for quick amounts
 		if (paymentMethods.value.length > 0) {
-			const defaultMethod = paymentMethods.value.find((m) => m.default)
-			lastSelectedMethod.value = defaultMethod || paymentMethods.value[0]
+			lastSelectedMethod.value = pickDefaultMethod(filteredPaymentMethods.value)
 		}
 		// Identify wallet payment methods
 		identifyWalletPaymentMethods()
@@ -1379,8 +1378,7 @@ async function loadPaymentMethods() {
 			if (cached && cached.length > 0) {
 				paymentMethods.value = cached
 				if (paymentMethods.value.length > 0) {
-					const defaultMethod = paymentMethods.value.find((m) => m.default)
-					lastSelectedMethod.value = defaultMethod || paymentMethods.value[0]
+					lastSelectedMethod.value = pickDefaultMethod(filteredPaymentMethods.value)
 				}
 			}
 		} else {
@@ -1591,8 +1589,7 @@ watch(show, (newVal) => {
 
 		// Set default payment method if already loaded
 		if (paymentMethods.value.length > 0 && !lastSelectedMethod.value) {
-			const defaultMethod = paymentMethods.value.find((m) => m.default)
-			lastSelectedMethod.value = defaultMethod || paymentMethods.value[0]
+			lastSelectedMethod.value = pickDefaultMethod(filteredPaymentMethods.value)
 		}
 
 		// Load customer credit and balance if enabled and customer is selected
@@ -1635,18 +1632,18 @@ function selectPaymentMethod(method) {
 // Helper to get default non-wallet payment method
 function getDefaultNonWalletMethod() {
 	// First try to find the default method that's not a wallet payment
-	const defaultMethod = paymentMethods.value.find(m => m.default && !isWalletPaymentMethod(m.mode_of_payment))
+	const defaultMethod = filteredPaymentMethods.value.find(m => m.default && !isWalletPaymentMethod(m.mode_of_payment))
 	if (defaultMethod) return defaultMethod
 
 	// Otherwise, find any non-wallet method (preferably Cash)
-	const cashMethod = paymentMethods.value.find(m =>
+	const cashMethod = filteredPaymentMethods.value.find(m =>
 		!isWalletPaymentMethod(m.mode_of_payment) &&
 		(m.mode_of_payment.toLowerCase().includes('cash') || m.type?.toLowerCase() === 'cash')
 	)
 	if (cashMethod) return cashMethod
 
 	// Fall back to first non-wallet method
-	return paymentMethods.value.find(m => !isWalletPaymentMethod(m.mode_of_payment))
+	return filteredPaymentMethods.value.find(m => !isWalletPaymentMethod(m.mode_of_payment))
 }
 
 // Helper to switch to next payment method after partial wallet payment
@@ -1671,6 +1668,7 @@ function switchToNextPaymentMethod(partialAmount) {
 
 // Quick add payment (long press action)
 function quickAddPayment(method) {
+	if (!isShownMethod(filteredPaymentMethods.value, method)) return
 	if (remainingAmount.value <= 0) return
 
 	lastSelectedMethod.value = method
@@ -1751,6 +1749,7 @@ function onPaymentMethodCancel() {
 
 // Add custom amount for a method
 function addCustomPayment(method, amount) {
+	if (!isShownMethod(filteredPaymentMethods.value, method)) return
 	log.debug('[PaymentDialog] Add custom payment:', {
 		method: method.mode_of_payment,
 		amount: amount,

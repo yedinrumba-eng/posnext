@@ -29,7 +29,7 @@ function body(source, name) {
 
 describe("AppOrdersDialog.vue", () => {
 	it("Charge button is disabled with a non-empty cart; no v-html", () => {
-		expect(dialog).toContain(':disabled="!cartEmpty"')
+		expect(dialog).toContain(':disabled="!cartEmpty || busy"')
 		expect(dialog).toContain("Clear the cart first to charge an app order.")
 		expect(dialog).not.toContain("v-html")
 	})
@@ -69,15 +69,16 @@ describe("POSSale.vue app orders wiring", () => {
 		expect(page).toContain("uiStore.showAppOrdersDialog = true")
 		expect(page).toContain('@charge="handleChargeAppOrder"')
 	})
-	it("handleChargeAppOrder: empty cart first, uses the cart plan and searchByBarcode", () => {
+	it("handleChargeAppOrder: delegates to the charger and shows the four toasts; the page keeps the lookups", () => {
 		const handler = body(page, "handleChargeAppOrder")
-		expect(handler).toContain("cartStore.isEmpty")
-		expect(handler).toContain("appOrders.loadOrder(")
-		expect(handler).toContain("order.chargeable")
-		expect(handler).toContain("cartPlan(order.lines, order.delivery_cents, appOrders.deliveryFeeItem)")
-		expect(handler).toContain("itemStore.searchByBarcode(")
-		expect(handler).toContain("needsWeightPrompt(")
-		expect(handler).toContain("cartStore.addItem(item, entry.qty, true, shiftStore.currentProfile)")
+		expect(handler).toContain("await chargeAppOrder(orderId)")
+		expect(handler).toContain("Clear the cart first to charge an app order.")
+		expect(handler).toContain("Could not load the app order. Try again.")
+		expect(handler).toContain("This app order can no longer be charged.")
+		expect(handler).toContain("No item of this order is in the POS catalog. See App orders.")
+		expect(page).toContain("itemStore.searchByBarcode(")
+		expect(page).toContain("needsWeightPrompt(")
+		expect(page).toContain("cartStore.addItem(item, qty, true, shiftStore.currentProfile)")
 	})
 	it("no v-html was added to the page or the payment dialog", () => {
 		expect(page).not.toContain("v-html")
@@ -123,5 +124,51 @@ describe("payload builders carry bodega_order_id", () => {
 		expect(ui).toContain('useDialog("appOrders")')
 		expect(ui).toContain("showAppOrdersDialog.value = false")
 		expect(ui).toMatch(/\n\t\tshowAppOrdersDialog,/)
+	})
+})
+
+// Spec 031a4a. Static checks of round 2.
+describe("round 2 wiring (031a4a)", () => {
+	it("T1 B1: loading a draft unlinks the app order before the items are replaced", () => {
+		const handler = body(page, "handleLoadDraft")
+		const swap = handler.indexOf("cartStore.invoiceItems = draftData.items")
+		expect(swap).toBeGreaterThan(-1)
+		const unlink = handler.indexOf("cartStore.setAppOrder(null)")
+		const clear = handler.indexOf("appOrders.missing = []")
+		expect(unlink).toBeGreaterThan(-1)
+		expect(unlink).toBeLessThan(swap)
+		expect(clear).toBeGreaterThan(-1)
+		expect(clear).toBeLessThan(swap)
+	})
+	it("T2: the page replaces the items in one place; editing offline clears the cart first", () => {
+		expect(page.match(/cartStore\.invoiceItems = /g)).toHaveLength(1)
+		const edit = body(page, "handleEditOfflineInvoice")
+		expect(edit).toContain("clearCart()")
+		expect(edit.indexOf("clearCart()")).toBeLessThan(edit.indexOf("addItem("))
+	})
+	it("T3: the charge button is guarded by busy and the page wires the charger", () => {
+		expect(dialog).toContain(':disabled="!cartEmpty || busy"')
+		expect(page).toContain(':busy="appOrderBusy"')
+		expect(page).toContain(':to-charge-total="appOrders.toChargeTotal"')
+		expect(page).toContain(':truncated="appOrders.toChargeTruncated"')
+		expect(page).toContain(':unresolved="appOrders.unresolved"')
+		expect(page).toContain("createAppOrderCharger(")
+		expect(page).not.toContain("cartPlan")
+	})
+	it("T4: the dialog says when the list is cut and what is missing; the menu counts the total", () => {
+		expect(dialog).toContain('v-if="truncated"')
+		expect(dialog).toContain('__("Showing {0} of {1} orders", [toCharge.length, toChargeTotal])')
+		expect(dialog).toContain("Not in the POS catalog: {0}. Add them by hand and charge as a normal sale, or close it in Desk.")
+		expect(dialog).toContain("unresolved.order_id === order.order_id")
+		expect(page).toContain('v-if="appOrders.toChargeTotal > 0"')
+		expect(page).toContain("{{ appOrders.toChargeTotal }}")
+	})
+	it("T5: the payment dialog picks and guards methods from the shown list", () => {
+		expect(payment).not.toContain("paymentMethods.value.find(")
+		expect(payment.match(/pickDefaultMethod\(filteredPaymentMethods\.value\)/g)).toHaveLength(3)
+		expect(body(payment, "addCustomPayment")).toContain("isShownMethod(")
+		expect(body(payment, "quickAddPayment")).toContain("isShownMethod(")
+		expect(payment).toContain("Register total before tax {1}")
+		expect(payment).not.toContain("Register total {1}.")
 	})
 })
