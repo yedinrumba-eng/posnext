@@ -8,9 +8,12 @@ from frappe import _
 from frappe.utils import cint
 from frappe.model.document import Document
 
+from pos_next.price_rules import PRICE_OVERRIDE_ROLES
+
 
 LOCKED_FIELDS = ("status", "pos_closing_shift")
 LOCKED_FIELDS_MESSAGE = "Shift status and its closing link change only through a POS Closing Shift"
+OWN_SHIFT_MESSAGE = "You can open a POS Opening Shift only for yourself"
 
 
 def _blank_if_none(value):
@@ -37,6 +40,29 @@ def duplicate_modes(rows) -> list:
     return dupes
 
 
+def shift_owner_violation(shift_user: str, session_user: str, roles: set) -> str | None:
+    """Return the error text unless the shift is for the session user or the roles may open for others."""
+    if shift_user == session_user or roles & PRICE_OVERRIDE_ROLES:
+        return None
+    return OWN_SHIFT_MESSAGE
+
+
+def open_shifts_of(user: str, exclude: str | None = None) -> list:
+    """Return the names of the user's submitted Open shifts, read under lock, except `exclude`."""
+    # korvex fork: one lock per user serializes opening and reopening (spec 049).
+    frappe.db.get_value("User", user, "name", for_update=True)
+    return (
+        frappe.db.get_values(
+            "POS Opening Shift",
+            {"user": user, "docstatus": 1, "status": "Open", "name": ["!=", exclude or ""]},
+            "name",
+            for_update=True,
+            pluck=True,
+        )
+        or []
+    )
+
+
 class POSOpeningShift(Document):
     def validate(self):
         # korvex fork: the closing link is written only by the close, never through validate (spec 042).
@@ -50,11 +76,8 @@ class POSOpeningShift(Document):
                 ),
                 title=_("Opening check"),
             )
-        # korvex fork: one open shift per cashier on every route (spec 042).
-        if self.docstatus == 1 and frappe.db.exists(
-            "POS Opening Shift",
-            {"user": self.user, "docstatus": 1, "status": "Open", "name": ["!=", self.name]},
-        ):
+        # korvex fork: one open shift per cashier on every route, read under lock (specs 042, 049).
+        if self.docstatus == 1 and open_shifts_of(self.user, self.name):
             frappe.throw(
                 _("This cashier already has an open POS Opening Shift. Close it before opening another"),
                 title=_("Opening check"),
@@ -85,6 +108,10 @@ class POSOpeningShift(Document):
                 _("User {0} cannot use POS Profile {1}").format(self.user, self.pos_profile),
                 frappe.PermissionError,
             )
+
+        error = shift_owner_violation(self.user, frappe.session.user, set(frappe.get_roles()))
+        if error:
+            frappe.throw(_(error), frappe.PermissionError)
 
     def on_submit(self):
         self.set_status(update=True)
