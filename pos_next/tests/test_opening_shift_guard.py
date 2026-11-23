@@ -68,6 +68,7 @@ def _snapshot(values):
 def _patch_opening(case):
 	fake_frappe = mock.MagicMock()
 	fake_frappe.throw.side_effect = _throw
+	fake_frappe.session.user = "u1"
 	for patch in (
 		mock.patch.object(opening, "frappe", new=fake_frappe),
 		mock.patch.object(opening, "_", new=lambda text: text),
@@ -138,6 +139,9 @@ class LockedFieldsCase(unittest.TestCase):
 class OpeningCleanCase(unittest.TestCase):
 	def setUp(self):
 		self.fake_frappe = _patch_opening(self)
+		patch = mock.patch.object(opening, "open_shifts_of", return_value=[])
+		self.open_shifts = patch.start()
+		self.addCleanup(patch.stop)
 
 	def test_duplicate_modes_lists_each_once(self):
 		names = ["Cash", "Card", "Cash", "Cash", "", None, None]
@@ -173,23 +177,20 @@ class OpeningCleanCase(unittest.TestCase):
 		fake = FakeShift()
 		fake.docstatus = 1
 		fake.name = "OS-2"
-		self.fake_frappe.db.exists.return_value = True
+		self.open_shifts.return_value = ["OS-1"]
 		with self.assertRaisesRegex(RuntimeError, "already has an open POS Opening Shift"):
 			opening.POSOpeningShift.validate(fake)
-		self.fake_frappe.db.exists.assert_called_once_with(
-			"POS Opening Shift", {"user": "u1", "docstatus": 1, "status": "Open", "name": ["!=", "OS-2"]}
-		)
+		self.open_shifts.assert_called_once_with("u1", "OS-2")
 		fake.set_status.assert_not_called()
 
 	def test_draft_save_skips_the_open_shift_check(self):
 		fake = FakeShift()
 		opening.POSOpeningShift.validate(fake)
-		self.fake_frappe.db.exists.assert_not_called()
+		self.open_shifts.assert_not_called()
 
 	def test_submit_without_another_open_shift_passes(self):
 		fake = FakeShift()
 		fake.docstatus = 1
-		self.fake_frappe.db.exists.return_value = False
 		opening.POSOpeningShift.validate(fake)
 		fake.set_status.assert_called_once_with()
 
@@ -199,7 +200,6 @@ class OpeningCleanCase(unittest.TestCase):
 		fake.pos_closing_shift = 0
 		fake.status = ""
 		fake.is_new.return_value = False
-		self.fake_frappe.db.exists.return_value = False
 		fake.set_status = lambda: opening.POSOpeningShift.set_status(fake)
 		opening.POSOpeningShift.validate(fake)
 		self.assertEqual(fake.pos_closing_shift, "")
@@ -222,6 +222,9 @@ class ClosingFlagsCase(unittest.TestCase):
 		self.fake_frappe = mock.MagicMock()
 		self.fake_frappe.throw.side_effect = _throw
 		patch = mock.patch.object(closing, "frappe", new=self.fake_frappe)
+		patch.start()
+		self.addCleanup(patch.stop)
+		patch = mock.patch.object(closing, "open_shifts_of", return_value=[])
 		patch.start()
 		self.addCleanup(patch.stop)
 		self.flags_at_save = []

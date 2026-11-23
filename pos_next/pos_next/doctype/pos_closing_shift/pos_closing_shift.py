@@ -14,6 +14,7 @@ from frappe.model.document import Document
 from frappe.utils import flt
 
 from pos_next.overrides.sales_invoice import subtract_change_once
+from pos_next.pos_next.doctype.pos_opening_shift.pos_opening_shift import open_shifts_of
 from pos_next.price_rules import PRICE_OVERRIDE_ROLES
 
 
@@ -227,6 +228,16 @@ class POSClosingShift(Document):
         if frappe.db.exists("POS Opening Shift", self.pos_opening_shift):
             opening_entry = frappe.get_doc("POS Opening Shift", self.pos_opening_shift)
             if opening_entry.pos_closing_shift == self.name:
+                # korvex fork: reopening skips validate, so the one-open-shift rule is checked here (spec 049).
+                others = open_shifts_of(opening_entry.user, opening_entry.name)
+                if others:
+                    frappe.throw(
+                        _(
+                            "User {0} already has an open POS Opening Shift {1}. "
+                            "Close it before cancelling this closing"
+                        ).format(opening_entry.user, others[0]),
+                        title=_("Closing check"),
+                    )
                 opening_entry.pos_closing_shift = ""
                 opening_entry.set_status()
                 # korvex fork: the only writer of the shift status (spec 040).
