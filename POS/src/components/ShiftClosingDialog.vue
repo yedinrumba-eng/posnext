@@ -9,6 +9,16 @@
         </div>
 
         <div v-else-if="closingData" class="flex flex-col gap-3 md:gap-6">
+          <!-- Offline sales gate (spec 048) -->
+          <div v-if="offlineBlock && !showSuccessReport" class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 md:p-4">
+            <h3 class="text-sm md:text-base font-semibold text-yellow-800">{{ __('Offline sales not synced yet') }}</h3>
+            <p class="text-xs md:text-sm text-yellow-700 mt-1">{{ __('{0} pending and {1} failed offline sales of this shift are not on the server. Sync them before closing.', [offlineCounts.pending, offlineCounts.failed]) }}</p>
+            <p v-if="isOffline" class="text-xs md:text-sm text-yellow-700 mt-1">{{ __('You are offline. Connect to the internet to sync.') }}</p>
+            <Button variant="solid" theme="blue" class="mt-2" @click="syncNow" :loading="isSyncing" :disabled="isOffline || isSyncing">
+              {{ __('Sync now') }}
+            </Button>
+          </div>
+
           <!-- Shift Summary Header (hidden in entry mode when hideExpectedAmount is enabled) -->
           <div v-if="shouldShowSummary" class="bg-white border border-gray-200 rounded-lg p-3 md:p-6 shadow-sm">
             <div class="flex flex-col sm:flex-row justify-start items-start gap-3 mb-3 md:mb-6">
@@ -472,7 +482,7 @@
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 order-1 sm:order-2">
           <!-- Validation Warning (only in entry mode) -->
           <div v-if="!canSubmit && closingData && !showSuccessReport" class="text-xs md:text-sm text-yellow-600 font-medium text-center sm:text-end">
-            {{ __('Please enter all closing amounts') }}
+            {{ offlineBlock ? __('Sync offline sales before closing') : __('Please enter all closing amounts') }}
           </div>
 
           <!-- Success message (shown in report view) -->
@@ -504,6 +514,8 @@ import { storeToRefs } from "pinia"
 import { useShift } from "../composables/useShift"
 import { useFormatters } from "../composables/useFormatters"
 import { usePOSSettingsStore } from "../stores/posSettings"
+import { usePOSSyncStore } from "../stores/posSync"
+import { closeBlockedByOffline, offlineSalesOfShift } from "../utils/offlineCloseGate"
 import TranslatedHTML from "./common/TranslatedHTML.vue"
 
 const props = defineProps({
@@ -529,6 +541,12 @@ const { getClosingShiftData, submitClosingShift } = useShift()
 const { formatCurrency, formatQuantity, formatDateTime, formatTime } = useFormatters()
 const posSettingsStore = usePOSSettingsStore()
 const { hideExpectedAmount } = storeToRefs(posSettingsStore)
+const syncStore = usePOSSyncStore()
+const { pendingInvoicesList, isSyncing, isOffline } = storeToRefs(syncStore)
+const offlineCounts = computed(() =>
+	offlineSalesOfShift(pendingInvoicesList.value, props.openingShift),
+)
+const offlineBlock = computed(() => closeBlockedByOffline(offlineCounts.value))
 
 const closingData = ref(null)
 const closingDataResource = getClosingShiftData
@@ -542,6 +560,7 @@ watch(open, async (isOpen) => {
 	if (isOpen && props.openingShift) {
 		// Refresh POS settings to get latest hideExpectedAmount value
 		await posSettingsStore.reloadSettings()
+		await syncStore.loadPendingInvoices()
 		loadClosingData()
 	}
 })
@@ -596,6 +615,7 @@ function updateClosingAmount(payment, value) {
 }
 
 const canSubmit = computed(() => {
+	if (offlineBlock.value) return false
 	if (!closingData.value || !closingData.value.payment_reconciliation)
 		return false
 
@@ -610,6 +630,8 @@ const canSubmit = computed(() => {
 
 async function submitClosing() {
 	if (!closingData.value) return
+	await syncStore.loadPendingInvoices()
+	if (offlineBlock.value) return
 
 	try {
 		errorMessage.value = '' // Clear any previous errors
@@ -639,6 +661,21 @@ async function submitClosing() {
 	} catch (error) {
 		console.error("Error submitting closing shift:", error)
 		errorMessage.value = 'Failed to close shift. Please verify all amounts and try again.'
+	}
+}
+
+async function syncNow() {
+	let failed = false
+	try {
+		await syncStore.syncAllPending()
+	} catch (error) {
+		console.error("Error syncing offline sales:", error)
+		failed = true
+	}
+	await syncStore.loadPendingInvoices()
+	await loadClosingData()
+	if (failed) {
+		errorMessage.value = __("Sync failed. Check the connection and try again.")
 	}
 }
 
