@@ -323,6 +323,7 @@ class POSClosingShift(Document):
     def delete_draft_invoices(self):
         if frappe.get_value("POS Profile", self.pos_profile, "posa_allow_delete"):
             doctype = "Sales Invoice"
+            # korvex fork: only drafts the POS API saved last; a Desk draft is never deleted here (spec 052a).
             data = frappe.db.sql(
                 f"""
 		select
@@ -330,7 +331,7 @@ class POSClosingShift(Document):
 		from
 		    `tab{doctype}`
 		where
-		    docstatus = 0 and posa_is_printed = 0 and posa_pos_opening_shift = %s
+		    docstatus = 0 and posa_is_printed = 0 and posa_saved_by_pos_api = 1 and posa_pos_opening_shift = %s
 		""",
                 (self.pos_opening_shift),
                 as_dict=1,

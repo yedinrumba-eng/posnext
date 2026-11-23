@@ -80,6 +80,11 @@ def offline_sale_shift(
 	return name
 
 
+def mark_pos_api_save(doc) -> None:
+	"""Remember whether this save came through the POS API; only those drafts may be cleaned up by the POS."""
+	doc.posa_saved_by_pos_api = 1 if doc.flags.get("pos_next_api") else 0
+
+
 def link_owner_desk_shift(doc) -> bool:
 	"""Put an owner's Desk POS sale or return on the only open shift of its POS Profile; True when it did."""
 	if doc.flags.get("pos_next_api") or doc.flags.get("from_closing_shift"):
@@ -163,6 +168,8 @@ class CustomSalesInvoice(SalesInvoice):
 	"""
 
 	def validate(self):
+		# korvex fork: only drafts last saved by the POS API may be deleted by the POS (spec 052a).
+		mark_pos_api_save(self)
 		self.enforce_pos_shift()
 		super().validate()
 

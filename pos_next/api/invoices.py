@@ -1177,6 +1177,8 @@ def cleanup_old_drafts(pos_profile=None, max_age_hours=24):
         "modified": ["<", cutoff_time.strftime("%Y-%m-%d %H:%M:%S")],
         "owner": frappe.session.user,
         "pos_profile": pos_profile,
+        # korvex fork: only drafts the POS API saved last; a Desk draft is never deleted here (spec 052a).
+        "posa_saved_by_pos_api": 1,
     }
 
     # Get old drafts
