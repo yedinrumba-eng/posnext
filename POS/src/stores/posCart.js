@@ -227,6 +227,7 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		appliedCoupon.value = null
 		currentDraftId.value = null
 		targetDoctype.value = "Sales Invoice"
+		kitchenOrderType.value = null
 
 		// Reset offer processing state
 		suppressOfferReapply.value = false
@@ -248,6 +249,13 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		deliveryDate.value = date
 	}
 
+	// "to_go" | "dine_in" | null (spec 031b2): set when the payment dialog completes, cleared with the cart
+	const kitchenOrderType = ref(null)
+
+	function setKitchenOrderType(value) {
+		kitchenOrderType.value = value
+	}
+
 	async function submitInvoice() {
 		if (invoiceItems.value.length === 0) {
 			showWarning(__("Cart is empty"))
@@ -258,7 +266,7 @@ export const usePOSCartStore = defineStore("posCart", () => {
 			return
 		}
 
-		return await baseSubmitInvoice(targetDoctype.value, deliveryDate.value)
+		return await baseSubmitInvoice(targetDoctype.value, deliveryDate.value, kitchenOrderType.value)
 	}
 
 	async function createSalesOrder() {
@@ -1722,6 +1730,8 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		createSalesOrder,
 		deliveryDate,
 		setDeliveryDate,
+		kitchenOrderType,
+		setKitchenOrderType,
 
 		// Utilities
 		cancelPendingOfferProcessing: () => {

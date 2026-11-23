@@ -1,6 +1,7 @@
 import { createResource } from "frappe-ui"
 import { computed, ref, toRaw } from "vue"
 import { effectiveTaxRate, taxRulesFromResponse } from "@/utils/itemTax"
+import { ORDER_TYPES } from "@/utils/kitchenOrder"
 import { lineAmounts } from "@/utils/lineMath"
 import { cartTaxTotals, DEFAULT_ROUNDING_METHOD, normalizeRoundingMethod } from "@/utils/taxRounding"
 import { mergeQuantity } from "@/utils/weight"
@@ -704,7 +705,7 @@ export function useInvoice() {
 		return result?.data || result
 	}
 
-	async function submitInvoice(targetDoctype = "Sales Invoice", deliveryDate = null) {
+	async function submitInvoice(targetDoctype = "Sales Invoice", deliveryDate = null, kitchenOrderType = null) {
 		/**
 		 * Two-step submission process:
 		 * 1. Create/update draft invoice
@@ -757,6 +758,11 @@ export function useInvoice() {
 
 			if (targetDoctype === "Sales Order" && deliveryDate) {
 				invoiceData.delivery_date = deliveryDate
+			}
+
+			// Counter order for the BODEGA kitchen (spec 031b2): only a valid choice on a Sales Invoice
+			if (targetDoctype === "Sales Invoice" && ORDER_TYPES.includes(kitchenOrderType)) {
+				invoiceData.korvex_order_type = kitchenOrderType
 			}
 
 			// Add sales_team if provided

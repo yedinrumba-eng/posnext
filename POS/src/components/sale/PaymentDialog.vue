@@ -532,6 +532,29 @@
 								<span>{{ __('Pay') }} {{ formatCurrency(remainingAmount) }}</span>
 							</button>
 
+							<div v-if="showKitchenChoice" class="flex gap-1 shrink-0">
+								<button
+									type="button"
+									@click="kitchenOrderType = 'to_go'"
+									:class="[
+										'px-3 py-2 rounded-lg text-sm font-semibold border-2 transition-colors',
+										kitchenOrderType === 'to_go' ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white border-gray-300 text-gray-700'
+									]"
+								>
+									{{ __('To go') }}
+								</button>
+								<button
+									type="button"
+									@click="kitchenOrderType = 'dine_in'"
+									:class="[
+										'px-3 py-2 rounded-lg text-sm font-semibold border-2 transition-colors',
+										kitchenOrderType === 'dine_in' ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white border-gray-300 text-gray-700'
+									]"
+								>
+									{{ __('Dine in') }}
+								</button>
+							</div>
+
 							<!-- Complete Payment Button -->
 							<button
 								v-if="remainingAmount === 0 && totalPaid > 0"
@@ -667,6 +690,29 @@
 							<span>{{ __('Pay on Account') }}</span>
 						</button>
 
+						<div v-if="showKitchenChoice" class="flex gap-1 shrink-0">
+							<button
+								type="button"
+								@click="kitchenOrderType = 'to_go'"
+								:class="[
+									'px-3 py-2 rounded-lg text-sm font-semibold border-2 transition-colors',
+									kitchenOrderType === 'to_go' ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white border-gray-300 text-gray-700'
+								]"
+							>
+								{{ __('To go') }}
+							</button>
+							<button
+								type="button"
+								@click="kitchenOrderType = 'dine_in'"
+								:class="[
+									'px-3 py-2 rounded-lg text-sm font-semibold border-2 transition-colors',
+									kitchenOrderType === 'dine_in' ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white border-gray-300 text-gray-700'
+								]"
+							>
+								{{ __('Dine in') }}
+							</button>
+						</div>
+
 						<!-- Complete/Partial Payment Button -->
 						<button
 							@click="completePayment"
@@ -697,6 +743,7 @@
 import { usePOSSettingsStore } from "@/stores/posSettings"
 import { usePOSCartStore } from "@/stores/posCart"
 import { snapExemption } from "@/utils/snapExemption"
+import { DEFAULT_ORDER_TYPE, hasKitchenLines } from "@/utils/kitchenOrder"
 import { formatCurrency as formatCurrencyUtil, getCurrencySymbol } from "@/utils/currency"
 import { getPaymentIcon } from "@/utils/payment"
 import { offlineWorker } from "@/utils/offline/workerClient"
@@ -766,6 +813,10 @@ const props = defineProps({
 		type: String,
 		default: "Sales Invoice",
 	},
+	kitchenItemGroups: {
+		type: Array,
+		default: () => [],
+	},
 })
 
 const emit = defineEmits(["update:modelValue", "payment-completed", "update-additional-discount"])
@@ -793,6 +844,12 @@ const walletPaymentMethods = ref(new Set()) // Set of mode_of_payment names that
 const deliveryDate = ref("")
 const today = new Date().toISOString().split("T")[0]
 const isSalesOrder = computed(() => props.targetDoctype === "Sales Order")
+
+// To go / Dine in question: only for a Sales Invoice with kitchen lines (spec 031b2)
+const kitchenOrderType = ref(DEFAULT_ORDER_TYPE)
+const showKitchenChoice = computed(() =>
+	props.targetDoctype === "Sales Invoice" && hasKitchenLines(props.items, props.kitchenItemGroups)
+)
 
 // Column refs for height matching
 const rightColumnRef = ref(null)
@@ -974,6 +1031,7 @@ function syncColumnHeights() {
 // Watch for dialog open to sync heights
 watch(() => props.modelValue, (isOpen) => {
 	if (isOpen) {
+		kitchenOrderType.value = DEFAULT_ORDER_TYPE
 		// Reset min height when dialog opens so we can measure fresh
 		rightColumnMinHeight.value = 'auto'
 		// Small delay to ensure DOM is rendered
@@ -1757,6 +1815,7 @@ function addCreditAccountPayment() {
 		is_credit_sale: true,  // Mark as credit sale
 		paid_amount: 0,
 		outstanding_amount: props.grandTotal,
+		kitchen_order_type: showKitchenChoice.value ? kitchenOrderType.value : null,
 	}
 
 	log.debug('[PaymentDialog] Emitting credit sale payment-completed:', paymentData)
@@ -1794,6 +1853,7 @@ function completePayment() {
 		outstanding_amount: isPartial ? remainingAmount.value : 0,
 		sales_team: selectedSalesPersons.value.length > 0 ? selectedSalesPersons.value : null,
 		delivery_date: isSalesOrder.value ? deliveryDate.value : null,
+		kitchen_order_type: showKitchenChoice.value ? kitchenOrderType.value : null,
 	}
 
 	log.debug('[PaymentDialog] Emitting payment-completed:', paymentData)

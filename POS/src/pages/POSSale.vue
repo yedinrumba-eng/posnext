@@ -166,6 +166,9 @@
 				</template>
 			</POSHeader>
 
+			<!-- Orders that did not reach the kitchen (spec 031b2) -->
+			<KitchenBand :rows="kitchenRows" @retry="handleKitchenRetry" @told="handleKitchenTold" />
+
 			<!-- Main Content: Responsive Layout -->
 			<div
 				v-if="shiftStore.hasOpenShift"
@@ -449,6 +452,7 @@
 			:tax-amount="cartStore.totalTax"
 			:discount-amount="cartStore.totalDiscount"
 			:target-doctype="cartStore.targetDoctype"
+			:kitchen-item-groups="kitchenBand.kitchenItemGroups"
 			@payment-completed="handlePaymentCompleted"
 			@update-additional-discount="handleAdditionalDiscountUpdate"
 		/>
@@ -951,6 +955,7 @@ import CreateCustomerDialog from "@/components/sale/CreateCustomerDialog.vue";
 import CustomerDialog from "@/components/sale/CustomerDialog.vue";
 import DraftInvoicesDialog from "@/components/sale/DraftInvoicesDialog.vue";
 import InvoiceCart from "@/components/sale/InvoiceCart.vue";
+import KitchenBand from "@/components/sale/KitchenBand.vue";
 import InvoiceHistoryDialog from "@/components/sale/InvoiceHistoryDialog.vue";
 import ItemSelectionDialog from "@/components/sale/ItemSelectionDialog.vue";
 import WeightDialog from "@/components/sale/WeightDialog.vue";
@@ -989,12 +994,15 @@ import { usePOSShiftStore } from "@/stores/posShift";
 import { usePOSSyncStore } from "@/stores/posSync";
 import { usePOSUIStore } from "@/stores/posUI";
 import { logger } from "@/utils/logger";
+import { useKitchenBandStore } from "@/stores/kitchenBand";
+import { offlineKitchenRows, serverKitchenRows } from "@/utils/kitchenOrder";
 
 // Initialize stores
 const cartStore = usePOSCartStore();
 const shiftStore = usePOSShiftStore();
 const uiStore = usePOSUIStore();
 const offlineStore = usePOSSyncStore();
+const kitchenBand = useKitchenBandStore();
 const draftsStore = usePOSDraftsStore();
 const posSettingsStore = usePOSSettingsStore();
 const itemStore = useItemSearchStore();
@@ -1133,6 +1141,37 @@ const profileWarehouses = computed(() => {
 // Resize state
 let resizeState = null;
 let bodyStyleSnapshot = null;
+
+// Kitchen band (spec 031b2): server rows plus the offline sales still waiting in the queue
+const kitchenRows = computed(() => [
+	...serverKitchenRows(kitchenBand.serverRows),
+	...offlineKitchenRows(offlineStore.pendingInvoicesList),
+]);
+
+async function tick() {
+	await offlineStore.loadPendingInvoices();
+	await kitchenBand.refresh(cartStore.posOpeningShift, offlineStore.isOffline);
+}
+
+async function handleKitchenRetry(invoice) {
+	const ok = await kitchenBand.retry(invoice);
+	await tick();
+	if (!ok) showWarning(__("Could not update. Tell the kitchen in person"));
+}
+
+async function handleKitchenTold(invoice) {
+	const ok = await kitchenBand.markTold(invoice);
+	await tick();
+	if (!ok) showWarning(__("Could not update. Tell the kitchen in person"));
+}
+
+watch(() => offlineStore.pendingInvoicesCount, () => {
+	tick();
+});
+
+onUnmounted(() => {
+	kitchenBand.stopPolling();
+});
 
 onMounted(async () => {
 	// Window resize listeners (passive for better performance)
@@ -1322,6 +1361,11 @@ onMounted(async () => {
 
 		updateLayoutBounds();
 		await draftsStore.updateDraftsCount();
+
+		// BODEGA kitchen band: loadSetup never throws and leaves everything off on a site without it
+		await kitchenBand.loadSetup();
+		await tick();
+		kitchenBand.startPolling(tick);
 	} catch (error) {
 		log.error("Error checking shift:", error);
 	} finally {
@@ -1823,6 +1867,7 @@ async function handleErrorRetry() {
 
 async function handlePaymentCompleted(paymentData) {
 	try {
+		cartStore.setKitchenOrderType(paymentData.kitchen_order_type ?? null);
 		const customerValue = cartStore.customer?.name || cartStore.customer;
 		if (!customerValue && !shiftStore.profileCustomer) {
 			showWarning(__("Please select a customer before proceeding"));
@@ -1870,7 +1915,13 @@ async function handlePaymentCompleted(paymentData) {
 				total_discount: cartStore.totalDiscount,
 			};
 
+			// Offline kitchen sale: the type travels with the queued sale and goes out when it syncs
+			if (paymentData.kitchen_order_type) {
+				invoiceData.korvex_order_type = paymentData.kitchen_order_type;
+			}
+
 			await offlineStore.saveInvoiceOffline(invoiceData);
+			tick();
 			uiStore.showSuccess(
 				`OFFLINE-${Date.now()}`,
 				cartStore.grandTotal,
