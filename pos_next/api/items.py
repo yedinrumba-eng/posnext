@@ -44,7 +44,7 @@ def get_stock_availability(item_code, warehouse):
 
 	rows = frappe.get_all(
 		"Bin",
-		fields=["sum(actual_qty) as actual_qty"],
+		fields=[{"SUM": "actual_qty", "as": "actual_qty"}],
 		filters={"item_code": item_code, "warehouse": ["in", warehouses]},
 	)
 
@@ -484,7 +484,7 @@ def get_item_variants(template_item, pos_profile):
 
 		# Add company filter to show items for specific company + global items
 		if pos_profile_doc.company:
-			variant_filters["ifnull(custom_company, '')"] = ["in", [pos_profile_doc.company, ""]]
+			variant_filters["custom_company"] = ["in", [pos_profile_doc.company, ""]]
 
 		variants = frappe.get_all(
 			"Item",
@@ -998,7 +998,7 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 		filters = {
 			"disabled": 0,
 			"is_sales_item": 1,  # Only show items with "Allow Sales" enabled
-			"ifnull(variant_of, '')": "",  # Exclude items that are variants of a template
+			"variant_of": "",  # Exclude items that are variants of a template
 		}
 
 		# IMPORTANT: Filtering logic explained:
@@ -1009,7 +1009,7 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 		# Add company filter - show items for specific company + global items (empty company)
 		# Global items (custom_company is empty) are available to all companies
 		if pos_profile_doc.company:
-			filters["ifnull(custom_company, '')"] = ["in", [pos_profile_doc.company, ""]]
+			filters["custom_company"] = ["in", [pos_profile_doc.company, ""]]
 
 		# Add item group filter if provided
 		if item_group:
