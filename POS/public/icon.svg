@@ -1,4 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <rect width="100" height="100" fill="#4F46E5" rx="20"/>
-  <path fill="white" d="M50 20h-8c-2.2 0-4 1.8-4 4v6h-8c-2.2 0-4 1.8-4 4v32c0 2.2 1.8 4 4 4h40c2.2 0 4-1.8 4-4V34c0-2.2-1.8-4-4-4h-8v-6c0-2.2-1.8-4-4-4h-8zm0 4h8v6h-8v-6zm20 10v32H30V34h40z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="">
+  <defs>
+    <linearGradient id="korvexcio-blue" x1="10" y1="8" x2="37" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1699ff"/>
+      <stop offset="0.48" stop-color="#1559ff"/>
+      <stop offset="1" stop-color="#1936d9"/>
+    </linearGradient>
+    <linearGradient id="korvexcio-silver" x1="37" y1="10" x2="57" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f0f4ff"/>
+      <stop offset="0.52" stop-color="#9ba8c1"/>
+      <stop offset="1" stop-color="#56647d"/>
+    </linearGradient>
+    <filter id="korvexcio-glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <path d="M9 13.5 15.5 7H31v13.5L23 28v8l8 7.5V57H15.5L9 50.5Z" fill="url(#korvexcio-blue)" filter="url(#korvexcio-glow)"/>
+  <path d="m34 27 13-18h10L40 31Z" fill="url(#korvexcio-silver)"/>
+  <path d="m40 33 17 22H47L34 37Z" fill="url(#korvexcio-silver)"/>
+  <path d="m25 31 6 6 6-6 3 3-9 9-9-9Z" fill="#c8d1e3"/>
 </svg>

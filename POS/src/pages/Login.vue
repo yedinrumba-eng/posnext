@@ -21,27 +21,27 @@
 					aria-hidden="true"
 				/>
 				<div class="korvex-login__brand-copy">
-					<h1>{{ __("KORVEXCIO") }}</h1>
-					<span>{{ __("Punto de venta") }}</span>
+					<h1>KORVEXCIO</h1>
+					<span>{{ __("Point of sale") }}</span>
 				</div>
 			</header>
 
 			<div class="korvex-login__intro">
-				<h2 id="login-title">{{ __("Iniciar sesión") }}</h2>
-				<p>{{ __("Accede a tu espacio de caja para continuar.") }}</p>
+				<h2 id="login-title">{{ __("Sign in") }}</h2>
+				<p>{{ __("Sign in to your register to continue.") }}</p>
 			</div>
 
 			<form class="korvex-login__form" @submit.prevent="submit">
 				<div v-if="session.login.error" class="korvex-login__error" role="alert">
 					<FeatherIcon name="alert-circle" aria-hidden="true" :stroke-width="2" />
 					<div>
-						<strong>{{ __("No pudimos iniciar sesión") }}</strong>
+						<strong>{{ __("We couldn't sign you in") }}</strong>
 						<p>{{ session.login.error.messages.join("\n") }}</p>
 					</div>
 				</div>
 
 				<div class="korvex-login__field">
-					<label for="korvex-login-email">{{ __("Usuario o correo") }}</label>
+					<label for="korvex-login-email">{{ __("Username or email") }}</label>
 					<input
 						id="korvex-login-email"
 						v-model="loginForm.email"
@@ -49,13 +49,13 @@
 						autocomplete="username"
 						name="email"
 						type="text"
-						:placeholder="__('Escribe tu usuario o correo')"
+						:placeholder="__('Enter your username or email')"
 						:disabled="session.login.loading"
 					/>
 				</div>
 
 				<div class="korvex-login__field">
-					<label for="korvex-login-password">{{ __("Contraseña") }}</label>
+					<label for="korvex-login-password">{{ __("Password") }}</label>
 					<span class="korvex-login__password">
 						<input
 							id="korvex-login-password"
@@ -64,14 +64,14 @@
 							autocomplete="current-password"
 							name="password"
 							:type="showPassword ? 'text' : 'password'"
-							:placeholder="__('Escribe tu contraseña')"
+							:placeholder="__('Enter your password')"
 							:disabled="session.login.loading"
 						/>
 						<button
 							type="button"
 							class="korvex-login__password-toggle"
 							:disabled="session.login.loading"
-							:aria-label="showPassword ? __('Ocultar contraseña') : __('Mostrar contraseña')"
+							:aria-label="showPassword ? __('Hide password') : __('Show password')"
 							@click="showPassword = !showPassword"
 						>
 							<FeatherIcon :name="showPassword ? 'eye-off' : 'eye'" aria-hidden="true" :stroke-width="2" />
@@ -85,11 +85,11 @@
 					:disabled="session.login.loading"
 				>
 					<span v-if="session.login.loading" class="korvex-login__spinner" aria-hidden="true" />
-					{{ session.login.loading ? __("Iniciando sesión...") : __("Iniciar sesión") }}
+					{{ session.login.loading ? __("Signing in...") : __("Sign in") }}
 				</button>
 			</form>
 
-			<footer>{{ __("Acceso autorizado para personal Korvex.") }}</footer>
+			<footer>{{ __("Authorized staff only.") }}</footer>
 		</section>
 
 		<ShiftOpeningDialog

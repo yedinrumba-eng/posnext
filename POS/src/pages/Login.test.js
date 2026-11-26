@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { nextTick } from "vue"
@@ -123,12 +124,12 @@ describe("KORVEXCIO point-of-sale login", () => {
 		const wrapper = mountLogin()
 
 		expect(wrapper.get("h1").text()).toBe("KORVEXCIO")
-		expect(wrapper.text()).toContain("Punto de venta")
+		expect(wrapper.text()).toContain("Point of sale")
 
 		const email = wrapper.get('input[name="email"]')
 		const password = wrapper.get('input[name="password"]')
-		expect(email.element.labels[0].textContent).toContain("Usuario o correo")
-		expect(password.element.labels[0].textContent).toContain("Contraseña")
+		expect(email.element.labels[0].textContent).toContain("Username or email")
+		expect(password.element.labels[0].textContent).toContain("Password")
 
 		await email.setValue("  cashier@example.com  ")
 		await password.setValue("secret passphrase")
@@ -150,7 +151,7 @@ describe("KORVEXCIO point-of-sale login", () => {
 			expect(control.element.disabled).toBe(true)
 		}
 		expect(wrapper.get('button[type="submit"]').text()).toContain(
-			"Iniciando sesión",
+			"Signing in",
 		)
 
 		session.login.loading = false
@@ -179,13 +180,13 @@ describe("KORVEXCIO point-of-sale login", () => {
 		await password.setValue("secret passphrase")
 
 		await wrapper
-			.get('button[aria-label="Mostrar contraseña"]')
+			.get('button[aria-label="Show password"]')
 			.trigger("click")
 		expect(password.attributes("type")).toBe("text")
 		expect(password.element.value).toBe("secret passphrase")
 
 		await wrapper
-			.get('button[aria-label="Ocultar contraseña"]')
+			.get('button[aria-label="Hide password"]')
 			.trigger("click")
 		expect(password.attributes("type")).toBe("password")
 		expect(password.element.value).toBe("secret passphrase")
