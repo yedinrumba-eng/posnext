@@ -52,6 +52,21 @@ GLOSSARY = (
 	("Hold", "espera"),
 )
 
+INDIRECT = (
+	("POS/src/utils/kitchenOrder.js", "kitchenReasonText", 9),
+	("POS/src/utils/appOrders.js", "fulfillmentText", 3),
+	("POS/src/utils/appOrders.js", "paymentText", 4),
+	("POS/src/utils/appOrders.js", "syncWarningText", 2),
+)
+RETURN_RE = re.compile(r"""\breturn\s+(["'])((?:\\.|(?!\1).)*)\1""")
+CALLEE_RE = re.compile(r"__\(\s*([A-Za-z_$][\w$]*)\s*\(")
+REVIEWED = {
+	"Clear": "Borrar",
+	"Dismiss": "Ocultar",
+	"On Account": "A cuenta",
+	"You have an active shift open. Would you like to:": "Tiene un turno activo abierto. Elija una opción:",
+}
+
 PLACEHOLDER_RE = re.compile(r"\{\d+\}")
 TAG_RE = re.compile(r"</?[A-Za-z][^>]*>")
 LITERALS = ("\\n", "${", "POS Next", "ERPNext", "Frappe", "EBT", "SNAP", "Verifone")
@@ -60,6 +75,26 @@ LITERALS = ("\\n", "${", "POS Next", "ERPNext", "Frappe", "EBT", "SNAP", "Verifo
 def _read_rows(path):
 	with open(path, encoding="utf-8", newline="") as handle:
 		return [row for row in csv.reader(handle)]
+
+
+def _unescape(text):
+	return text.replace("\\'", "'").replace('\\"', '"')
+
+
+def indirect_literals():
+	"""Return literals per INDIRECT function: the return "..." strings of its body."""
+	found = {}
+	for rel, name, _count in INDIRECT:
+		text = (ROOT / rel).read_text(encoding="utf-8")
+		start = text.find(f"export function {name}(")
+		if start == -1:
+			raise AssertionError(f"{name} not found")
+		end = text.find("\n}\n", start)
+		if end == -1:
+			raise AssertionError(f"{name} not found")
+		body = text[start:end]
+		found[name] = [_unescape(m.group(2)) for m in RETURN_RE.finditer(body)]
+	return found
 
 
 def expected_keys():
@@ -80,6 +115,8 @@ def expected_keys():
 			if "&lt;" in key:
 				continue
 			keys.add(key)
+	for literals in indirect_literals().values():
+		keys.update(literals)
 	return keys
 
 
@@ -157,6 +194,28 @@ class TestSpanishLocale(unittest.TestCase):
 		for key in REVIEW_KEYS:
 			self.assertIn(key, table)
 			self.assertNotEqual(table[key], key, key)
+
+	def test_indirect_literals_found(self):
+		found = indirect_literals()
+		for _rel, name, count in INDIRECT:
+			self.assertEqual(len(found[name]), count, f"{name}: {found[name]}")
+
+	def test_indirect_callees_known(self):
+		known = {name for _rel, name, _count in INDIRECT}
+		callees = set()
+		for path in (ROOT / "POS/src").rglob("*"):
+			if path.suffix not in (".vue", ".js", ".ts") or ".test." in path.name:
+				continue
+			if path.relative_to(ROOT).as_posix() == SKIP_FILE:
+				continue
+			callees.update(CALLEE_RE.findall(path.read_text(encoding="utf-8")))
+		self.assertTrue(callees <= known, f"unknown __(f(...)) callees: {sorted(callees - known)}")
+
+	def test_reviewed_wording(self):
+		self.assertTrue(ES.exists(), "es.csv missing")
+		table = {row[0]: row[1] for row in es_rows()}
+		for key, expected in REVIEWED.items():
+			self.assertEqual(table.get(key), expected, key)
 
 
 if __name__ == "__main__":
