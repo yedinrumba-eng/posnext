@@ -97,6 +97,7 @@ export function createAppOrderCharger(deps, options = {}) {
 						fulfillment: order.fulfillment,
 						total_cents: order.total_cents,
 						tip_cents: order.tip_cents,
+						lines_rev: Number.isInteger(order.lines_rev) ? order.lines_rev : null,
 					})
 					deps.setMissing(lineCodes)
 					return "fee_only"
@@ -119,6 +120,7 @@ export function createAppOrderCharger(deps, options = {}) {
 				fulfillment: order.fulfillment,
 				total_cents: order.total_cents,
 				tip_cents: order.tip_cents,
+				lines_rev: Number.isInteger(order.lines_rev) ? order.lines_rev : null,
 			})
 			deps.setMissing(missing)
 			return "charged"

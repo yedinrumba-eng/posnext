@@ -533,6 +533,8 @@
 				v-model="uiStore.showAppOrdersDialog"
 				:to-charge="appOrders.toCharge"
 				:cancelled-after-charge="appOrders.cancelledAfterCharge"
+				:lines-changed-after-charge="appOrders.linesChangedAfterCharge"
+				:removed-lines="appOrders.removedLines"
 				:sync="appOrders.sync"
 				:is-offline="offlineStore.isOffline"
 				:cart-empty="cartStore.isEmpty"
@@ -2071,6 +2073,9 @@ async function handlePaymentCompleted(paymentData) {
 			// App order: the server validates it when the queued sale syncs (D-031a.13)
 			if (cartStore.appOrder?.order_id) {
 				invoiceData.bodega_order_id = cartStore.appOrder.order_id;
+				if (Number.isInteger(cartStore.appOrder.lines_rev)) {
+					invoiceData.bodega_lines_rev = cartStore.appOrder.lines_rev;
+				}
 			}
 
 			await offlineStore.saveInvoiceOffline(invoiceData);

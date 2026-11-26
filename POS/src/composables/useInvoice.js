@@ -705,7 +705,7 @@ export function useInvoice() {
 		return result?.data || result
 	}
 
-	async function submitInvoice(targetDoctype = "Sales Invoice", deliveryDate = null, kitchenOrderType = null, bodegaOrderId = null) {
+	async function submitInvoice(targetDoctype = "Sales Invoice", deliveryDate = null, kitchenOrderType = null, bodegaOrderId = null, bodegaLinesRev = null) {
 		/**
 		 * Two-step submission process:
 		 * 1. Create/update draft invoice
@@ -768,6 +768,9 @@ export function useInvoice() {
 			// BODEGA app order being charged (spec 031a4): the server validates it on submit
 			if (targetDoctype === "Sales Invoice" && typeof bodegaOrderId === "string" && bodegaOrderId) {
 				invoiceData.bodega_order_id = bodegaOrderId
+				if (Number.isInteger(bodegaLinesRev)) {
+					invoiceData.bodega_lines_rev = bodegaLinesRev
+				}
 			}
 
 			// Add sales_team if provided

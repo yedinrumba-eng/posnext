@@ -257,7 +257,7 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		kitchenOrderType.value = value
 	}
 
-	// BODEGA app order loaded into this cart (spec 031a4): {order_id, short_code, fulfillment, total_cents, tip_cents}
+	// BODEGA app order loaded into this cart (spec 031a4): {order_id, short_code, fulfillment, total_cents, tip_cents, lines_rev}
 	const appOrder = ref(null)
 
 	function setAppOrder(value) {
@@ -279,6 +279,7 @@ export const usePOSCartStore = defineStore("posCart", () => {
 			deliveryDate.value,
 			kitchenOrderType.value,
 			appOrder.value?.order_id ?? null,
+			appOrder.value?.lines_rev ?? null,
 		)
 	}
 

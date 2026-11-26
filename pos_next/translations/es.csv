@@ -1456,3 +1456,6 @@
 "Payment not known","Pago desconocido",""
 "App orders stopped syncing. Tell the owner.","Los pedidos de la app dejaron de sincronizarse. Avise al dueño.",""
 "App orders are not up to date. Tell the owner if this stays.","Los pedidos de la app no están al día. Avise al dueño si sigue así.",""
+"A line was removed in the app after this order was charged","Se quitó una línea en la app después de cobrar este pedido",""
+"Removed: {0} x {1}","Quitado: {0} x {1}",""
+"Refund only that line with a return. Do not refund the whole order. Then it leaves this list.","Reembolse solo esa línea con una devolución. No reembolse el pedido completo. Después sale de esta lista.",""
