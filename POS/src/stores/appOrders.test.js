@@ -184,34 +184,28 @@ describe("appOrders store", () => {
 		expect(store.unresolved).toBeNull()
 	})
 
-	it("057a: loads removed lines once", async () => {
-		const removed = [
-			{ line_no: 1, product_id: "chicken-cutlet", qty: 1, line_cents: 999, removed_at: "2026-11-12T15:05:00.000Z" },
-		]
-		const LIST = {
-			...LIST_OK,
-			lines_changed_after_charge: [{ order_id: "c", short_code: "001", charged_invoice: "ACC-2" }],
-		}
+	it("057c: rows carry their lines", async () => {
+		const gone = (line_no, product_id) => ({
+			line_no,
+			product_id,
+			qty: 1,
+			line_cents: 999,
+			removed_at: "2026-11-12T15:05:00.000Z",
+		})
+		const row = (lines) => ({ order_id: "c", short_code: "001", charged_invoice: "ACC-2", lines })
 		const store = useAppOrdersStore()
-		impl.get.mockImplementation(async (method) => {
-			if (method.endsWith("get_app_orders")) return LIST
-			throw new Error("down")
-		})
+		impl.get.mockResolvedValueOnce({ ...LIST_OK, lines_changed_after_charge: [row([gone(1, "chicken-cutlet")])] })
 		await store.refresh()
-		expect(store.linesChangedAfterCharge).toEqual(LIST.lines_changed_after_charge)
-		expect(store.removedLines).not.toHaveProperty("c")
-		calls.length = 0
-		impl.get.mockImplementation(async (method) => {
-			if (method.endsWith("get_app_orders")) return LIST
-			return { order_id: "c", removed_lines: removed }
-		})
+		expect(store.linesChangedAfterCharge[0].lines).toEqual([gone(1, "chicken-cutlet")])
+		const second = row([gone(1, "chicken-cutlet"), gone(2, "soda")])
+		impl.get.mockResolvedValueOnce({ ...LIST_OK, lines_changed_after_charge: [second] })
 		await store.refresh()
-		expect(store.removedLines.c).toEqual(removed)
-		expect(calls.filter((c) => c[1] === "get_app_order")).toHaveLength(1)
-		calls.length = 0
-		await store.refresh()
-		expect(calls.filter((c) => c[1] === "get_app_order")).toHaveLength(0)
-		expect(calls.filter((c) => c[1] === "get_app_orders")).toHaveLength(1)
+		expect(store.linesChangedAfterCharge).toEqual([second])
+		expect(calls).toEqual([
+			["GET", "get_app_orders"],
+			["GET", "get_app_orders"],
+		])
+		expect(store.removedLines).toBeUndefined()
 	})
 
 	it("057a: old server without the key", async () => {
@@ -225,13 +219,12 @@ describe("appOrders store", () => {
 			...LIST_OK,
 			lines_changed_after_charge: [{ order_id: "c", short_code: "001", charged_invoice: "ACC-2" }],
 		})
-		impl.get.mockResolvedValueOnce({ order_id: "c", removed_lines: [] })
 		await store.refresh()
-		expect(store.removedLines.c).toEqual([])
+		expect(store.removedLines).toBeUndefined()
 		impl.get.mockResolvedValueOnce({ enabled: false })
 		await store.refresh()
 		expect(store.linesChangedAfterCharge).toEqual([])
-		expect(store.removedLines).toEqual({})
+		expect(store.removedLines).toBeUndefined()
 	})
 
 	it("S4: unresolved of an order that left the list is cleared; one still there stays", async () => {

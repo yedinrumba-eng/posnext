@@ -185,13 +185,27 @@ describe("removed-line box and lines_rev (057a, 057b)", () => {
 		expect(box).toContain("A line was removed in the app after this order was charged")
 		expect(box).toContain("Removed: {0} x {1}")
 		expect(box).toContain(
-			"Refund only that line with a return. Do not refund the whole order. Then it leaves this list.",
+			"Refund only these lines with a return. Do not refund the whole order. Then ask the owner to close them.",
 		)
 		expect(box).not.toContain("<button")
 		expect(box).not.toContain("@click")
 		expect(box).not.toContain("$emit")
 		expect(page).toContain(':lines-changed-after-charge="appOrders.linesChangedAfterCharge"')
-		expect(page).toContain(':removed-lines="appOrders.removedLines"')
+		expect(page).not.toContain(":removed-lines=")
+		expect(dialog).not.toContain("removedLines")
+	})
+	it("057c: box pins its row", () => {
+		const start = dialog.indexOf("<!-- Line removed in the app after it was charged -->")
+		const end = dialog.indexOf("Clear the cart first", start)
+		const box = dialog.slice(start, end)
+		expect(box).toContain("order.short_code")
+		expect(box).toContain("order.charged_invoice")
+		expect(box).toContain('line in order.lines || []')
+		expect(box).toContain(':key="line.line_no"')
+		expect(box).toContain("Refund only these lines with a return. Do not refund the whole order. Then ask the owner to close them.")
+		expect(box).not.toContain("<button")
+		expect(box).not.toContain("@click")
+		expect(page).toContain("Number.isInteger(cartStore.appOrder.lines_rev)")
 	})
 	it("057b: lines_rev rides with the app order", () => {
 		const fn = body(invoice, "submitInvoice")
