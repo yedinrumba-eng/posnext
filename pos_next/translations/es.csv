@@ -1459,3 +1459,4 @@
 "A line was removed in the app after this order was charged","Se quitó una línea en la app después de cobrar este pedido",""
 "Removed: {0} x {1}","Quitado: {0} x {1}",""
 "Refund only that line with a return. Do not refund the whole order. Then it leaves this list.","Reembolse solo esa línea con una devolución. No reembolse el pedido completo. Después sale de esta lista.",""
+"Refund only these lines with a return. Do not refund the whole order. Then ask the owner to close them.","Reembolse solo estas líneas con una devolución. No reembolse el pedido completo. Después pida al dueño que las cierre.",""

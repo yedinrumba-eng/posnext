@@ -534,7 +534,6 @@
 				:to-charge="appOrders.toCharge"
 				:cancelled-after-charge="appOrders.cancelledAfterCharge"
 				:lines-changed-after-charge="appOrders.linesChangedAfterCharge"
-				:removed-lines="appOrders.removedLines"
 				:sync="appOrders.sync"
 				:is-offline="offlineStore.isOffline"
 				:cart-empty="cartStore.isEmpty"

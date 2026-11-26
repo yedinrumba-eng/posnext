@@ -30,8 +30,8 @@
 						<p class="text-sm font-semibold text-red-700">{{ __("A line was removed in the app after this order was charged") }}</p>
 						<div v-for="order in linesChangedAfterCharge" :key="order.order_id" class="mt-2">
 							<p class="text-sm text-red-700">#{{ order.short_code }} · {{ order.charged_invoice }}</p>
-							<p v-for="(line, index) in removedLines[order.order_id] || []" :key="index" class="text-xs text-red-700">{{ __("Removed: {0} x {1}", [line.product_id, line.qty]) }}</p>
-							<p class="text-xs text-red-600">{{ __("Refund only that line with a return. Do not refund the whole order. Then it leaves this list.") }}</p>
+							<p v-for="line in order.lines || []" :key="line.line_no" class="text-xs text-red-700">{{ __("Removed: {0} x {1}", [line.product_id, line.qty]) }}</p>
+							<p class="text-xs text-red-600">{{ __("Refund only these lines with a return. Do not refund the whole order. Then ask the owner to close them.") }}</p>
 						</div>
 					</div>
 
@@ -118,10 +118,6 @@ const props = defineProps({
 	linesChangedAfterCharge: {
 		type: Array,
 		default: () => [],
-	},
-	removedLines: {
-		type: Object,
-		default: () => ({}),
 	},
 	sync: {
 		type: Object,

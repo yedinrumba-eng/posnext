@@ -11,7 +11,6 @@ export const useAppOrdersStore = defineStore("appOrders", () => {
 	const toCharge = ref([])
 	const cancelledAfterCharge = ref([])
 	const linesChangedAfterCharge = ref([])
-	const removedLines = ref({})
 	const sync = ref(null)
 	const missing = ref([])
 	const toChargeTotal = ref(0)
@@ -25,7 +24,6 @@ export const useAppOrdersStore = defineStore("appOrders", () => {
 		toCharge.value = []
 		cancelledAfterCharge.value = []
 		linesChangedAfterCharge.value = []
-		removedLines.value = {}
 		sync.value = null
 		toChargeTotal.value = 0
 		toChargeTruncated.value = false
@@ -115,14 +113,6 @@ export const useAppOrdersStore = defineStore("appOrders", () => {
 				)
 					? result.lines_changed_after_charge
 					: []
-				// Spec 057a: each order is loaded once per session; a failed load retries next refresh
-				for (const row of linesChangedAfterCharge.value) {
-					if (!row?.order_id || row.order_id in removedLines.value) continue
-					const order = await loadOrder(row.order_id)
-					if (Array.isArray(order?.removed_lines)) {
-						removedLines.value[row.order_id] = order.removed_lines
-					}
-				}
 			}
 		} catch (error) {
 			// keep the previous lists
@@ -161,7 +151,6 @@ export const useAppOrdersStore = defineStore("appOrders", () => {
 		toCharge,
 		cancelledAfterCharge,
 		linesChangedAfterCharge,
-		removedLines,
 		sync,
 		missing,
 		toChargeTotal,
