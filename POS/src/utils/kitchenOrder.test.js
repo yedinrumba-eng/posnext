@@ -303,7 +303,7 @@ describe("useInvoice and posCart static checks", () => {
 	it("posCart keeps, passes, clears and exports the type", () => {
 		expect(cart).toContain("const kitchenOrderType = ref(null)")
 		expect(cart).toMatch(/function setKitchenOrderType\(value\)/)
-		expect(cart).toContain("baseSubmitInvoice(\n\t\t\ttargetDoctype.value,\n\t\t\tdeliveryDate.value,\n\t\t\tkitchenOrderType.value,\n\t\t\tappOrder.value?.order_id ?? null,\n\t\t)")
+		expect(cart).toContain("baseSubmitInvoice(\n\t\t\ttargetDoctype.value,\n\t\t\tdeliveryDate.value,\n\t\t\tkitchenOrderType.value,\n\t\t\tappOrder.value?.order_id ?? null,\n\t\t\tappOrder.value?.lines_rev ?? null,\n\t\t)")
 		expect(body(cart, "clearCart", "\t")).toContain("kitchenOrderType.value = null")
 		expect(cart).toMatch(/\n\t\tkitchenOrderType,\n\t\tsetKitchenOrderType,/)
 	})
