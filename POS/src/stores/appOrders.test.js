@@ -184,6 +184,56 @@ describe("appOrders store", () => {
 		expect(store.unresolved).toBeNull()
 	})
 
+	it("057a: loads removed lines once", async () => {
+		const removed = [
+			{ line_no: 1, product_id: "chicken-cutlet", qty: 1, line_cents: 999, removed_at: "2026-11-12T15:05:00.000Z" },
+		]
+		const LIST = {
+			...LIST_OK,
+			lines_changed_after_charge: [{ order_id: "c", short_code: "001", charged_invoice: "ACC-2" }],
+		}
+		const store = useAppOrdersStore()
+		impl.get.mockImplementation(async (method) => {
+			if (method.endsWith("get_app_orders")) return LIST
+			throw new Error("down")
+		})
+		await store.refresh()
+		expect(store.linesChangedAfterCharge).toEqual(LIST.lines_changed_after_charge)
+		expect(store.removedLines).not.toHaveProperty("c")
+		calls.length = 0
+		impl.get.mockImplementation(async (method) => {
+			if (method.endsWith("get_app_orders")) return LIST
+			return { order_id: "c", removed_lines: removed }
+		})
+		await store.refresh()
+		expect(store.removedLines.c).toEqual(removed)
+		expect(calls.filter((c) => c[1] === "get_app_order")).toHaveLength(1)
+		calls.length = 0
+		await store.refresh()
+		expect(calls.filter((c) => c[1] === "get_app_order")).toHaveLength(0)
+		expect(calls.filter((c) => c[1] === "get_app_orders")).toHaveLength(1)
+	})
+
+	it("057a: old server without the key", async () => {
+		impl.get.mockResolvedValue(LIST_OK)
+		const store = useAppOrdersStore()
+		await store.refresh()
+		expect(store.linesChangedAfterCharge).toEqual([])
+		expect(store.toCharge).toHaveLength(1)
+		expect(calls).toEqual([["GET", "get_app_orders"]])
+		impl.get.mockResolvedValueOnce({
+			...LIST_OK,
+			lines_changed_after_charge: [{ order_id: "c", short_code: "001", charged_invoice: "ACC-2" }],
+		})
+		impl.get.mockResolvedValueOnce({ order_id: "c", removed_lines: [] })
+		await store.refresh()
+		expect(store.removedLines.c).toEqual([])
+		impl.get.mockResolvedValueOnce({ enabled: false })
+		await store.refresh()
+		expect(store.linesChangedAfterCharge).toEqual([])
+		expect(store.removedLines).toEqual({})
+	})
+
 	it("S4: unresolved of an order that left the list is cleared; one still there stays", async () => {
 		impl.get.mockResolvedValue(LIST_OK)
 		const store = useAppOrdersStore()

@@ -289,7 +289,7 @@ describe("PaymentDialog static checks", () => {
 describe("useInvoice and posCart static checks", () => {
 	it("submitInvoice sets korvex_order_type only for a Sales Invoice with a valid type", () => {
 		expect(invoice).toContain(
-			'async function submitInvoice(targetDoctype = "Sales Invoice", deliveryDate = null, kitchenOrderType = null, bodegaOrderId = null)',
+			'async function submitInvoice(targetDoctype = "Sales Invoice", deliveryDate = null, kitchenOrderType = null, bodegaOrderId = null, bodegaLinesRev = null)',
 		)
 		expect(invoice).toMatch(
 			/if \(targetDoctype === "Sales Invoice" && ORDER_TYPES\.includes\(kitchenOrderType\)\) \{\s*invoiceData\.korvex_order_type = kitchenOrderType/,

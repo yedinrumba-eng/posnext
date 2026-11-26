@@ -208,11 +208,36 @@ describe("createAppOrderCharger", () => {
 			fulfillment: "pickup",
 			total_cents: 1000,
 			tip_cents: 0,
+			lines_rev: null,
 		})
 		expect(names(log, "setMissing").at(-1)).toEqual([
 			"setMissing",
 			["bacon-egg-cheese"],
 		])
+	})
+
+	it("057b: setAppOrder carries lines_rev", async () => {
+		const charged = setup({ loadOrder: async () => ({ ...ORDER, lines_rev: 2 }) })
+		expect(await charged.charger.charge("o1")).toBe("charged")
+		expect(names(charged.log, "setAppOrder")[0][1].lines_rev).toBe(2)
+
+		const feeOnly = setup({
+			loadOrder: async () => ({
+				...ORDER,
+				fulfillment: "delivery",
+				delivery_cents: 300,
+				lines_rev: 1,
+				lines: [{ line_no: 1, product_id: "bacon-egg-cheese", qty: 1 }],
+			}),
+			resolveItem: async (code) =>
+				code === "DELIVERY" ? { item_code: code } : null,
+		})
+		expect(await feeOnly.charger.charge("o1")).toBe("fee_only")
+		expect(names(feeOnly.log, "setAppOrder")[0][1].lines_rev).toBe(1)
+
+		const text = setup({ loadOrder: async () => ({ ...ORDER, lines_rev: "2" }) })
+		expect(await text.charger.charge("o1")).toBe("charged")
+		expect(names(text.log, "setAppOrder")[0][1].lines_rev).toBeNull()
 	})
 
 	// Spec 031a4b.

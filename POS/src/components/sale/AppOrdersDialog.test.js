@@ -110,7 +110,7 @@ describe("payload builders carry bodega_order_id", () => {
 		expect(guard).toContain('targetDoctype === "Sales Invoice"')
 		expect(guard).toContain("bodegaOrderId")
 		expect(fn.match(/bodega_order_id/g)).toHaveLength(1)
-		expect(invoice).toMatch(/async function submitInvoice\([^)]*bodegaOrderId = null\)/)
+		expect(invoice).toMatch(/async function submitInvoice\([^)]*bodegaOrderId = null, bodegaLinesRev = null\)/)
 		expect(body(invoice, "saveDraft")).not.toContain("bodega_order_id")
 	})
 	it("posCart holds the app order and passes it to submitInvoice", () => {
@@ -170,6 +170,45 @@ describe("round 2 wiring (031a4a)", () => {
 		expect(body(payment, "quickAddPayment")).toContain("isShownMethod(")
 		expect(payment).toContain("Register total before tax {1}")
 		expect(payment).not.toContain("Register total {1}.")
+	})
+})
+
+// Spec 057a and 057b. Static checks of the removed-line box and of lines_rev.
+describe("removed-line box and lines_rev (057a, 057b)", () => {
+	it("057a: removed-line box has no action", () => {
+		const start = dialog.indexOf("<!-- Line removed in the app after it was charged -->")
+		expect(start).toBeGreaterThan(-1)
+		const end = dialog.indexOf("Clear the cart first", start)
+		expect(end).toBeGreaterThan(start)
+		const box = dialog.slice(start, end)
+		expect(box).toContain('v-if="linesChangedAfterCharge.length > 0"')
+		expect(box).toContain("A line was removed in the app after this order was charged")
+		expect(box).toContain("Removed: {0} x {1}")
+		expect(box).toContain(
+			"Refund only that line with a return. Do not refund the whole order. Then it leaves this list.",
+		)
+		expect(box).not.toContain("<button")
+		expect(box).not.toContain("@click")
+		expect(box).not.toContain("$emit")
+		expect(page).toContain(':lines-changed-after-charge="appOrders.linesChangedAfterCharge"')
+		expect(page).toContain(':removed-lines="appOrders.removedLines"')
+	})
+	it("057b: lines_rev rides with the app order", () => {
+		const fn = body(invoice, "submitInvoice")
+		const from = fn.indexOf("invoiceData.bodega_order_id = bodegaOrderId")
+		const to = fn.indexOf("// Add sales_team")
+		expect(from).toBeGreaterThan(-1)
+		expect(to).toBeGreaterThan(from)
+		const span = fn.slice(from, to)
+		expect(span).toContain("Number.isInteger(bodegaLinesRev)")
+		expect(span).toContain("invoiceData.bodega_lines_rev = bodegaLinesRev")
+		expect(body(invoice, "saveDraft")).not.toContain("bodega_lines_rev")
+		expect(cart).toContain("appOrder.value?.lines_rev ?? null")
+		const a = page.indexOf("if (cartStore.appOrder?.order_id) {")
+		const b = page.indexOf("await offlineStore.saveInvoiceOffline(invoiceData);", a)
+		expect(a).toBeGreaterThan(-1)
+		expect(b).toBeGreaterThan(a)
+		expect(page.slice(a, b)).toContain("invoiceData.bodega_lines_rev = cartStore.appOrder.lines_rev")
 	})
 })
 
